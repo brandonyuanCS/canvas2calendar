@@ -18,7 +18,7 @@ model user {
   google_user_id          String    @unique
   email                   String
   google_access_token     String?
-  google_refres_token     String?
+  google_refresh_token    String?
   google_token_expires_at DateTime?
   preferences             Json?
   created_at              DateTime  @default(now())
