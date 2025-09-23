@@ -10,6 +10,7 @@ const PORT = process.env.PORT || '3001';
 app.use(cors());
 app.use(json());
 app.use('/api', routes);
+app.use('/calendar', routes);
 
 // dummy endpoint
 app.get('/helloworld', (req, res) => {
