@@ -33,7 +33,8 @@ model calendar {
   user_id            Int
   google_calendar_id String   @unique
   title              String
-  created_at         DateTime
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   user user @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
@@ -43,7 +44,8 @@ model task_list {
   user_id        Int
   google_task_id String   @unique
   title          String
-  created_at     DateTime
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   user user @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
