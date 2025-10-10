@@ -256,14 +256,6 @@ router.post('/event', async (req, res) => {
         : { dateTime: new Date(end_time).toISOString() },
     };
 
-    if (is_all_day) {
-      eventData.start = { date: new Date(start_time).toISOString().split('T')[0] };
-      eventData.end = { date: new Date(end_time).toISOString().split('T')[0] };
-    } else {
-      eventData.start = { dateTime: new Date(start_time).toISOString() };
-      eventData.end = { dateTime: new Date(end_time).toISOString() };
-    }
-
     const response = await calendar.events.insert({
       calendarId: calendarRecord.google_calendar_id,
       requestBody: eventData,
@@ -286,7 +278,7 @@ router.post('/event', async (req, res) => {
         description: description?.trim(),
         start_time: new Date(start_time),
         end_time: new Date(end_time),
-        is_all_day: is_all_day,
+        is_all_day: is_all_day || false,
         location: location?.trim(),
         event_hash: event_hash,
       },
@@ -342,6 +334,9 @@ router.patch('/event/:id', async (req, res) => {
     if (!existingEvent) {
       return res.status(404).json({ error: 'Couldnt find existing event in DB' });
     }
+    if (existingEvent.calendar_id !== calendarRecord.id) {
+      return res.status(403).json({ error: 'User not authorized to modify this event' });
+    }
 
     const client = createOAuth2Client();
     client.setCredentials({
@@ -358,9 +353,9 @@ router.patch('/event/:id', async (req, res) => {
       eventData.summary = title.trim();
     }
     if (description !== undefined) {
-      eventData.description = description.trim();
+      eventData.description = description?.trim();
     }
-    if (location != undefined) {
+    if (location !== undefined) {
       eventData.location = location?.trim();
     }
     if (start_time || end_time || is_all_day !== undefined) {
@@ -454,6 +449,9 @@ router.delete('/event/:id', async (req, res) => {
     });
     if (!existingEvent) {
       return res.status(404).json({ error: 'Event not found in DB' });
+    }
+    if (existingEvent.calendar_id !== calendarRecord.id) {
+      return res.status(403).json({ error: 'User not authorized to modify this event' });
     }
 
     const client = createOAuth2Client();
