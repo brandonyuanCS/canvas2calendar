@@ -46,6 +46,7 @@ model calendar_event {
   id              Int      @id @default(autoincrement())
   calendar_id     Int
   google_event_id String   @unique
+  ics_uid         String   @unique @default("unknown")
   title           String
   description     String?
   start_time      DateTime
@@ -60,6 +61,7 @@ model calendar_event {
   calendar calendar @relation(fields: [calendar_id], references: [id], onDelete: Cascade)
 
   @@index([calendar_id])
+  @@index([ics_uid])
 }
 
 model task_list {
@@ -79,6 +81,7 @@ model task {
   id             Int       @id @default(autoincrement())
   task_list_id   Int
   google_task_id String    @unique
+  ics_uid        String    @unique @default("unknown")
   title          String
   notes          String?
   due_date       DateTime?
@@ -90,4 +93,5 @@ model task {
   task_list task_list @relation(fields: [task_list_id], references: [id], onDelete: Cascade)
 
   @@index([task_list_id])
+  @@index([ics_uid])
 }

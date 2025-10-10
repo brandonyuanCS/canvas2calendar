@@ -143,10 +143,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// IMPORTANT: this endpoint is not like the others, it queries straight from DB instead of Google
-//            purely for hash comparison, we don't actually need data from Google Calendar
-//            becuase we respect users' manual edits
-
 router.get('/event', async (req, res) => {
   try {
     const { user_id } = req.query;
@@ -161,6 +157,9 @@ router.get('/event', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+    if (!user.google_access_token) {
+      return res.status(401).json({ error: 'User not authenticated with Google' });
+    }
     if (user.calendars.length === 0) {
       return res.status(404).json({
         error: 'No calendar found for this user',
@@ -170,27 +169,35 @@ router.get('/event', async (req, res) => {
 
     const calendarRecord = user.calendars[0];
 
-    const events = await prisma.calendar_event.findMany({
-      where: { calendar_id: calendarRecord.id },
-      select: {
-        google_event_id: true,
-        event_hash: true,
-        title: true,
-        start_time: true,
-        end_time: true,
-      },
-      orderBy: { start_time: 'asc' },
+    const client = createOAuth2Client();
+    client.setCredentials({
+      access_token: user.google_access_token,
+      refresh_token: user.google_refresh_token,
+      expiry_date: user.google_token_expires_at?.getTime(),
     });
+
+    const calendar = google.calendar({ version: 'v3', auth: client });
+
+    const response = await calendar.events.list({
+      calendarId: calendarRecord.google_calendar_id,
+      maxResults: 2500,
+      singleEvents: true,
+      orderBy: 'startTime',
+    });
+
+    const events = response.data.items || [];
 
     return res.json({
       success: true,
       count: events.length,
       events: events.map(event => ({
-        id: event.google_event_id,
-        hash: event.event_hash,
-        title: event.title,
-        start_time: event.start_time,
-        end_time: event.end_time,
+        id: event.id,
+        title: event.summary,
+        description: event.description,
+        start: event.start,
+        end: event.end,
+        location: event.location,
+        status: event.status,
       })),
     });
   } catch (error) {
