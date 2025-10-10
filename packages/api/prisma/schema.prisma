@@ -21,31 +21,73 @@ model user {
   google_refresh_token    String?
   google_token_expires_at DateTime?
   preferences             Json?
-  created_at              DateTime  @default(now())
-  updated_at              DateTime  @updatedAt
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   calendars  calendar[]
   task_lists task_list[]
 }
 
 model calendar {
-  id                 Int      @id @default(autoincrement())
+  id                 Int    @id @default(autoincrement())
   user_id            Int
-  google_calendar_id String   @unique
+  google_calendar_id String @unique
   title              String
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
 
-  user user @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user   user             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  events calendar_event[]
+}
+
+model calendar_event {
+  id              Int      @id @default(autoincrement())
+  calendar_id     Int
+  google_event_id String   @unique
+  title           String
+  description     String?
+  start_time      DateTime
+  end_time        DateTime
+  is_all_day      Boolean  @default(false)
+  location        String?
+  event_hash      String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  calendar calendar @relation(fields: [calendar_id], references: [id], onDelete: Cascade)
+
+  @@index([calendar_id])
 }
 
 model task_list {
-  id             Int      @id @default(autoincrement())
-  user_id        Int
-  google_task_id String   @unique
-  title          String
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  id                  Int    @id @default(autoincrement())
+  user_id             Int
+  google_task_list_id String @unique
+  title               String
 
-  user user @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user  user   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tasks task[]
+}
+
+model task {
+  id             Int       @id @default(autoincrement())
+  task_list_id   Int
+  google_task_id String    @unique
+  title          String
+  notes          String?
+  due_date       DateTime?
+  task_hash      String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  task_list task_list @relation(fields: [task_list_id], references: [id], onDelete: Cascade)
+
+  @@index([task_list_id])
 }
