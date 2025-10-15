@@ -1,6 +1,12 @@
 import { google } from 'googleapis';
 import type { Auth } from 'googleapis';
 
+interface UserTokens {
+  access_token: string | null;
+  refresh_token: string | null;
+  expiry_date?: number | null;
+}
+
 export const createOAuth2Client = (): Auth.OAuth2Client =>
   new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -34,4 +40,26 @@ export const getUserInfo = async (tokens: Auth.Credentials) => {
   client.setCredentials(tokens);
   const oauth2 = google.oauth2({ version: 'v2', auth: client });
   return await oauth2.userinfo.get();
+};
+
+// for calendar + task services
+
+export const getGoogleCalendarClient = (tokens: UserTokens) => {
+  const client = createOAuth2Client();
+  client.setCredentials({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expiry_date: tokens.expiry_date,
+  });
+  return google.calendar({ version: 'v3', auth: client });
+};
+
+export const getGoogleTasksClient = (tokens: UserTokens) => {
+  const client = createOAuth2Client();
+  client.setCredentials({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expiry_date: tokens.expiry_date,
+  });
+  return google.tasks({ version: 'v1', auth: client });
 };

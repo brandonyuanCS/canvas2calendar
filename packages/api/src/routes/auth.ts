@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
-import { getAuthUrl, getTokenFromCode, getUserInfo } from '../services/google-auth.js';
+import { generateToken } from '../services/auth.service.js';
+import { getAuthUrl, getTokenFromCode, getUserInfo } from '../services/google.service.js';
 import { Router } from 'express';
 
 const router = Router();
@@ -30,6 +31,7 @@ router.get('/callback', async (req, res) => {
     if (!userInfo.data.id || !userInfo.data.email) {
       return res.status(400).json({ error: 'Failed to get user info from Google' });
     }
+
     const user = await prisma.user.upsert({
       where: { google_user_id: userInfo.data.id },
       update: {
@@ -47,13 +49,15 @@ router.get('/callback', async (req, res) => {
       },
     });
 
-    // TODO delete after testing
+    // generate JWT
+    const jwtToken = generateToken(user.id);
+
     return res.json({
       success: true,
+      token: jwtToken,
       user: {
         id: user.id,
         email: user.email,
-        google_user_id: user.google_user_id,
       },
     });
   } catch (error) {
