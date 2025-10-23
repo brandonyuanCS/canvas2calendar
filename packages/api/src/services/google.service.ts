@@ -42,8 +42,33 @@ export const getUserInfo = async (tokens: Auth.Credentials) => {
   return await oauth2.userinfo.get();
 };
 
-// for calendar + task services
+export const refreshAccessToken = async (refreshToken: string) => {
+  if (!refreshToken) {
+    throw new Error('No refresh token available');
+  }
 
+  const client = createOAuth2Client();
+  client.setCredentials({
+    refresh_token: refreshToken,
+  });
+
+  try {
+    const { credentials } = await client.refreshAccessToken();
+    if (!credentials.access_token) {
+      throw new Error('Failed to refresh access token');
+    }
+
+    return {
+      access_token: credentials.access_token,
+      expiry_date: credentials.expiry_date || null,
+    };
+  } catch (error) {
+    console.error('Error refreshing access token:', error);
+    throw new Error('Failed to refresh Google access token. User may need to re-authenticate.');
+  }
+};
+
+// for calendar + task services
 export const getGoogleCalendarClient = (tokens: UserTokens) => {
   const client = createOAuth2Client();
   client.setCredentials({

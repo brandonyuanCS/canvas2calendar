@@ -21,6 +21,7 @@ model user {
   google_refresh_token    String?
   google_token_expires_at DateTime?
   preferences             Json?
+  canvas_ics_feed_url     String?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

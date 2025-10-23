@@ -208,6 +208,9 @@ importers:
       googleapis:
         specifier: ^126.0.1
         version: 126.0.1
+      ical.js:
+        specifier: ^2.2.1
+        version: 2.2.1
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.2

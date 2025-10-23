@@ -180,4 +180,50 @@ router.delete('/event/:id', async (req, res) => {
   }
 });
 
+// Sync endpoint - primary method for syncing Canvas events
+router.post('/sync', async (req, res) => {
+  try {
+    const { ics_url } = req.body; // optional override
+
+    const report = await CalendarService.syncCalendarFromICS(req.user!.id, ics_url);
+
+    return res.json({
+      success: true,
+      report: {
+        summary: {
+          created: report.created.length,
+          updated: report.updated.length,
+          deleted: report.deleted.length,
+          unchanged: report.unchanged.length,
+          errors: report.errors.length,
+        },
+        details: {
+          created: report.created,
+          updated: report.updated,
+          deleted: report.deleted,
+          errors: report.errors,
+        },
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'No ICS feed URL provided or stored for this user') {
+        return res.status(400).json({
+          error: error.message,
+          message: 'Please provide an ics_url in the request body or set it using PUT /user/ics-url',
+        });
+      }
+      if (error.message === 'No calendar found for this user') {
+        return res.status(404).json({
+          error: error.message,
+          message: 'Create a calendar first using POST /calendar',
+        });
+      }
+      console.error('Error syncing calendar:', error);
+      return res.status(500).json({ error: 'Failed to sync calendar' });
+    }
+    return res.status(500).json({ error: 'Failed to sync calendar' });
+  }
+});
+
 export default router;

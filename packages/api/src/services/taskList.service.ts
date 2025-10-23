@@ -1,5 +1,7 @@
 import * as GoogleService from './google.service.js';
 import { prisma } from '../lib/prisma.js';
+import { generateEventHash } from '../utils/hash.util.js';
+import type { CanvasEvent } from '../utils/ics-parser.js';
 import type { tasks_v1 } from 'googleapis';
 
 // helper functions
@@ -180,6 +182,7 @@ export const createTask = async (
     notes?: string;
     due_date?: string;
     task_hash?: string;
+    ics_uid?: string;
   },
 ) => {
   const { user, taskListRecord } = await getUserAndTaskList(userId, googleTaskListId);
@@ -210,6 +213,7 @@ export const createTask = async (
     data: {
       task_list_id: taskListRecord.id,
       google_task_id: createdTask.id,
+      ics_uid: taskData.ics_uid || 'unknown',
       title: taskData.title.trim(),
       notes: taskData.notes?.trim(),
       due_date: taskData.due_date ? new Date(taskData.due_date) : null,
@@ -332,4 +336,206 @@ export const deleteTask = async (userId: number, googleTaskListId: string, googl
   });
 
   return { id: googleTaskId };
+};
+
+// Sync types
+export interface TaskSyncReport {
+  taskLists: {
+    created: Array<{ title: string; id: string }>;
+    existing: Array<{ title: string; id: string }>;
+  };
+  tasks: {
+    created: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
+    updated: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
+    deleted: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
+    unchanged: Array<{ ics_uid: string; title: string; taskListTitle: string }>;
+  };
+  errors: Array<{ ics_uid?: string; courseCode?: string; error: string }>;
+}
+
+// Sync tasks from parsed ICS data, grouped by course
+export const syncTasks = async (userId: number, events: CanvasEvent[]): Promise<TaskSyncReport> => {
+  const report: TaskSyncReport = {
+    taskLists: {
+      created: [],
+      existing: [],
+    },
+    tasks: {
+      created: [],
+      updated: [],
+      deleted: [],
+      unchanged: [],
+    },
+    errors: [],
+  };
+
+  try {
+    // 1. Get user
+    const user = await getUser(userId);
+
+    // 2. Group events by course code
+    const eventsByCourse = new Map<string, CanvasEvent[]>();
+    for (const event of events) {
+      const courseCode = event.courseCode || 'Uncategorized';
+      if (!eventsByCourse.has(courseCode)) {
+        eventsByCourse.set(courseCode, []);
+      }
+      eventsByCourse.get(courseCode)!.push(event);
+    }
+
+    // 3. For each course, find or create task list
+    const tasksClient = GoogleService.getGoogleTasksClient({
+      access_token: user.google_access_token,
+      refresh_token: user.google_refresh_token,
+      expiry_date: user.google_token_expires_at?.getTime(),
+    });
+
+    for (const [courseCode, courseEvents] of eventsByCourse) {
+      try {
+        // Find existing task list for this course
+        let taskListRecord = await prisma.task_list.findFirst({
+          where: {
+            user_id: user.id,
+            title: courseCode,
+          },
+        });
+
+        let googleTaskListId: string;
+
+        if (!taskListRecord) {
+          // Create new task list
+          const response = await tasksClient.tasklists.insert({
+            requestBody: {
+              title: courseCode,
+            },
+          });
+
+          const createdTaskList = response.data;
+          if (!createdTaskList.id) {
+            throw new Error(`Failed to create task list for ${courseCode}`);
+          }
+
+          googleTaskListId = createdTaskList.id;
+
+          taskListRecord = await prisma.task_list.create({
+            data: {
+              user_id: user.id,
+              google_task_list_id: googleTaskListId,
+              title: courseCode,
+            },
+          });
+
+          report.taskLists.created.push({
+            title: courseCode,
+            id: googleTaskListId,
+          });
+        } else {
+          googleTaskListId = taskListRecord.google_task_list_id;
+          report.taskLists.existing.push({
+            title: courseCode,
+            id: googleTaskListId,
+          });
+        }
+
+        // 4. Load existing tasks for this task list
+        const existingTasks = await prisma.task.findMany({
+          where: { task_list_id: taskListRecord.id },
+        });
+
+        // 5. Build maps by ics_uid
+        const existingTaskMap = new Map(existingTasks.map(t => [t.ics_uid, t]));
+        const incomingTaskMap = new Map(courseEvents.map(e => [e.uid, { event: e, hash: generateEventHash(e) }]));
+
+        // 6. Determine operations (create/update/delete)
+
+        // Check for creates and updates
+        for (const [icsUid, { event: incomingEvent, hash: incomingHash }] of incomingTaskMap) {
+          try {
+            const existingTask = existingTaskMap.get(icsUid);
+
+            if (!existingTask) {
+              // CREATE: Task doesn't exist in our DB
+              const createdTask = await createTask(userId, googleTaskListId, {
+                title: incomingEvent.summary,
+                notes: incomingEvent.description,
+                due_date: incomingEvent.dtstart.toISOString(),
+                task_hash: incomingHash,
+                ics_uid: icsUid,
+              });
+
+              report.tasks.created.push({
+                ics_uid: icsUid,
+                title: incomingEvent.summary,
+                id: createdTask.id!,
+                taskListTitle: courseCode,
+              });
+            } else if (existingTask.task_hash !== incomingHash) {
+              // UPDATE: Task exists but hash changed
+              const updatedTask = await updateTask(userId, googleTaskListId, existingTask.google_task_id, {
+                title: incomingEvent.summary,
+                notes: incomingEvent.description,
+                due_date: incomingEvent.dtstart.toISOString(),
+                task_hash: incomingHash,
+              });
+
+              report.tasks.updated.push({
+                ics_uid: icsUid,
+                title: incomingEvent.summary,
+                id: updatedTask.id!,
+                taskListTitle: courseCode,
+              });
+            } else {
+              // UNCHANGED: Task exists and hash matches
+              report.tasks.unchanged.push({
+                ics_uid: icsUid,
+                title: incomingEvent.summary,
+                taskListTitle: courseCode,
+              });
+            }
+          } catch (error) {
+            report.errors.push({
+              ics_uid: icsUid,
+              courseCode,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        // Check for deletes (tasks in DB but not in ICS for this course)
+        // Only delete Canvas-synced tasks (preserve manually created tasks)
+        for (const [icsUid, existingTask] of existingTaskMap) {
+          if (!incomingTaskMap.has(icsUid) && icsUid.startsWith('event-')) {
+            try {
+              await deleteTask(userId, googleTaskListId, existingTask.google_task_id);
+              report.tasks.deleted.push({
+                ics_uid: icsUid,
+                title: existingTask.title,
+                id: existingTask.google_task_id,
+                taskListTitle: courseCode,
+              });
+            } catch (error) {
+              report.errors.push({
+                ics_uid: icsUid,
+                courseCode,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              });
+            }
+          }
+        }
+      } catch (error) {
+        report.errors.push({
+          courseCode,
+          error: error instanceof Error ? error.message : 'Unknown error processing course',
+        });
+      }
+    }
+
+    return report;
+  } catch (error) {
+    // Top-level error
+    report.errors.push({
+      error: error instanceof Error ? error.message : 'Unknown error during task sync',
+    });
+    return report;
+  }
 };

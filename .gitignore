@@ -25,4 +25,5 @@ tsconfig.tsbuildinfo
 **/tailwind-output.css
 
 # other
-DOCUMENTATION.md
+internal-documentation/
+**/.vscode
