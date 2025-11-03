@@ -32,3 +32,41 @@ export interface CentralSyncReport {
     sync_completed_at: Date;
   };
 }
+
+// API response structure - matches what the /sync endpoint returns
+export interface ApiSyncReport {
+  calendar: {
+    summary: {
+      created: number;
+      updated: number;
+      deleted: number;
+      unchanged: number;
+      errors: number;
+    };
+    details: SyncReport;
+  };
+  tasks: {
+    summary: {
+      lists_created: number;
+      lists_existing: number;
+      tasks_created: number;
+      tasks_updated: number;
+      tasks_deleted: number;
+      tasks_unchanged: number;
+      errors: number;
+    };
+    details: {
+      taskLists: TaskSyncReport['taskLists'];
+      tasks: TaskSyncReport['tasks'];
+      errors: TaskSyncReport['errors'];
+    };
+  };
+  metadata: {
+    total_events_parsed: number;
+    events_to_calendar: number;
+    events_to_tasks: number;
+    filtered_out: number;
+    sync_started_at: Date;
+    sync_completed_at: Date;
+  };
+}

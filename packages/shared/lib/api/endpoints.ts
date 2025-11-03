@@ -1,5 +1,5 @@
 import { apiClient } from './client.js';
-import type { CentralSyncReport, SyncPreferences } from '../types/index.js';
+import type { ApiSyncReport, SyncPreferences } from '../types/index.js';
 
 /**
  * Typed API endpoint methods
@@ -104,7 +104,7 @@ export const sync = {
   /**
    * Perform a sync operation
    */
-  async performSync(): Promise<{ success: boolean; report?: CentralSyncReport; error?: string }> {
+  async performSync(): Promise<{ success: boolean; report?: ApiSyncReport; error?: string }> {
     return apiClient.request('/sync', {
       method: 'POST',
     });

@@ -1,11 +1,11 @@
 import { auth, calendar, user, sync } from '@extension/shared';
 import { useEffect, useState } from 'react';
-import type { CentralSyncReport } from '@extension/shared';
+import type { ApiSyncReport } from '@extension/shared';
 import './Popup.css';
 
 type ApiSyncResponse = {
   success: boolean;
-  report?: CentralSyncReport;
+  report?: ApiSyncReport;
   error?: string;
 };
 
@@ -342,7 +342,7 @@ export default function Popup() {
           <h1 className="text-lg font-bold text-gray-800">Canvas2Calendar</h1>
           <p className="text-xs text-gray-500">{userEmail}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-end gap-1">
           <button
             onClick={() => setShowDebugLogs(!showDebugLogs)}
             className="text-xs text-gray-500 hover:text-gray-700">
@@ -483,16 +483,22 @@ export default function Popup() {
                   <p className="mb-1 text-xs font-medium text-gray-700">Calendar:</p>
                   <div className="grid grid-cols-4 gap-1 text-xs">
                     <div>
-                      <span className="text-green-600">+{syncReport.report?.calendar.created.length}</span>
+                      <span className="text-green-600">
+                        +{syncReport.report?.calendar.details?.created?.length ?? 0}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-blue-600">~{syncReport.report?.calendar.updated.length}</span>
+                      <span className="text-blue-600">
+                        ~{syncReport.report?.calendar.details?.updated?.length ?? 0}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-red-600">-{syncReport.report?.calendar.deleted.length}</span>
+                      <span className="text-red-600">-{syncReport.report?.calendar.details?.deleted?.length ?? 0}</span>
                     </div>
                     <div>
-                      <span className="text-gray-500">={syncReport.report?.calendar.unchanged.length}</span>
+                      <span className="text-gray-500">
+                        ={syncReport.report?.calendar.details?.unchanged?.length ?? 0}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -501,16 +507,24 @@ export default function Popup() {
                   <p className="mb-1 text-xs font-medium text-gray-700">Tasks:</p>
                   <div className="grid grid-cols-4 gap-1 text-xs">
                     <div>
-                      <span className="text-green-600">+{syncReport.report?.tasks.tasks.created.length}</span>
+                      <span className="text-green-600">
+                        +{syncReport.report?.tasks.details?.tasks?.created?.length ?? 0}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-blue-600">~{syncReport.report?.tasks.tasks.updated.length}</span>
+                      <span className="text-blue-600">
+                        ~{syncReport.report?.tasks.details?.tasks?.updated?.length ?? 0}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-red-600">-{syncReport.report?.tasks.tasks.deleted.length}</span>
+                      <span className="text-red-600">
+                        -{syncReport.report?.tasks.details?.tasks?.deleted?.length ?? 0}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-gray-500">={syncReport.report?.tasks.tasks.unchanged.length}</span>
+                      <span className="text-gray-500">
+                        ={syncReport.report?.tasks.details?.tasks?.unchanged?.length ?? 0}
+                      </span>
                     </div>
                   </div>
                 </div>
