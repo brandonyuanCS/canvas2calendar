@@ -1,51 +1,11 @@
 import * as CalendarService from './calendar.service.js';
 import * as TaskListService from './taskList.service.js';
 import { prisma } from '../lib/prisma.js';
+import { DEFAULT_PREFERENCES } from '../types/preferences.js';
 import { ICSParser } from '../utils/ics-parser.js';
-import type { SyncReport } from './calendar.service.js';
-import type { TaskSyncReport } from './taskList.service.js';
-import type { CanvasEvent } from '../utils/ics-parser.js';
-
-// User preferences types
-interface SyncPreferences {
-  sync_rules: {
-    calendar: ('lecture' | 'event' | 'quiz' | 'discussion' | 'assignment')[];
-    tasks: ('lecture' | 'event' | 'quiz' | 'discussion' | 'assignment')[];
-  };
-  filters?: {
-    excluded_courses?: string[];
-    included_courses?: string[];
-    date_range?: {
-      past_days?: number;
-      future_days?: number;
-    };
-  };
-  auto_sync?: {
-    enabled: boolean;
-    interval_hours: number;
-  };
-}
-
-interface CentralSyncReport {
-  calendar: SyncReport;
-  tasks: TaskSyncReport;
-  metadata: {
-    total_events_parsed: number;
-    events_to_calendar: number;
-    events_to_tasks: number;
-    filtered_out: number;
-    sync_started_at: Date;
-    sync_completed_at: Date;
-  };
-}
-
-// Default preferences for new users
-const DEFAULT_PREFERENCES: SyncPreferences = {
-  sync_rules: {
-    calendar: ['lecture', 'event'],
-    tasks: ['assignment', 'quiz', 'discussion'],
-  },
-};
+import type { CanvasEvent } from '../types/canvas.js';
+import type { SyncPreferences } from '../types/preferences.js';
+import type { CentralSyncReport, SyncReport, TaskSyncReport } from '../types/sync-reports.js';
 
 // Helper to create empty reports
 const createEmptySyncReport = (): SyncReport => ({
@@ -88,65 +48,73 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
     throw new Error('No ICS feed URL provided or stored for this user');
   }
 
-  // Parse preferences with defaults
+  // Parse preferences with defaults (deep merge)
+  const userPrefs = (user.preferences as unknown as Partial<SyncPreferences>) || {};
   const preferences: SyncPreferences = {
-    ...DEFAULT_PREFERENCES,
-    ...((user.preferences as unknown as SyncPreferences) || {}),
+    sync: { ...DEFAULT_PREFERENCES.sync!, ...userPrefs.sync },
+    calendar: { ...DEFAULT_PREFERENCES.calendar, ...userPrefs.calendar },
+    tasks: { ...DEFAULT_PREFERENCES.tasks, ...userPrefs.tasks },
+    data_management: {
+      ...DEFAULT_PREFERENCES.data_management!,
+      ...userPrefs.data_management,
+    },
   };
 
   // 2. Fetch and parse ICS once
   const parser = new ICSParser();
   const parsedICS = await parser.fetchAndParse(feedUrl);
 
-  // 3. Apply filters
-  let filteredEvents = parsedICS.events;
+  // 3. Apply global date range filter
+  let allEvents = parsedICS.events;
 
-  // Filter by date range
-  if (preferences.filters?.date_range) {
+  if (preferences.data_management?.date_range) {
     const now = new Date();
-    const pastCutoff = preferences.filters.date_range.past_days
-      ? new Date(now.getTime() - preferences.filters.date_range.past_days * 24 * 60 * 60 * 1000)
-      : null;
-    const futureCutoff = preferences.filters.date_range.future_days
-      ? new Date(now.getTime() + preferences.filters.date_range.future_days * 24 * 60 * 60 * 1000)
-      : null;
+    const { past_days, future_days } = preferences.data_management.date_range;
 
-    filteredEvents = filteredEvents.filter(event => {
+    const pastCutoff = past_days ? new Date(now.getTime() - past_days * 24 * 60 * 60 * 1000) : null;
+    const futureCutoff = future_days ? new Date(now.getTime() + future_days * 24 * 60 * 60 * 1000) : null;
+
+    allEvents = allEvents.filter(event => {
       if (pastCutoff && event.dtstart < pastCutoff) return false;
       if (futureCutoff && event.dtstart > futureCutoff) return false;
       return true;
     });
   }
 
-  // Filter by course inclusion/exclusion
-  if (preferences.filters?.excluded_courses && preferences.filters.excluded_courses.length > 0) {
-    filteredEvents = filteredEvents.filter(
-      event => !preferences.filters!.excluded_courses!.includes(event.courseCode || ''),
-    );
-  }
-
-  if (preferences.filters?.included_courses && preferences.filters.included_courses.length > 0) {
-    filteredEvents = filteredEvents.filter(event =>
-      preferences.filters!.included_courses!.includes(event.courseCode || ''),
-    );
-  }
-
-  // 4. Split events based on sync_rules
+  // 4. Split and filter events based on preferences
   const calendarEvents: CanvasEvent[] = [];
   const taskEvents: CanvasEvent[] = [];
 
-  for (const event of filteredEvents) {
-    const eventType = event.eventType || 'event';
+  for (const event of allEvents) {
+    const eventType = event.eventType; // Always set by ICS parser
+    const courseCode = event.courseCode || '';
 
-    const goesToCalendar = preferences.sync_rules.calendar.includes(eventType);
-    const goesToTasks = preferences.sync_rules.tasks.includes(eventType);
-
-    // Event can go to both, one, or neither
+    // Check if event goes to calendar
+    const goesToCalendar = preferences.calendar.event_types.includes(eventType);
     if (goesToCalendar) {
-      calendarEvents.push(event);
+      // Apply calendar-specific course filters
+      const isExcluded = preferences.calendar.excluded_courses.includes(courseCode);
+      const isIncluded =
+        preferences.calendar.included_courses.length === 0 || // Empty = all courses
+        preferences.calendar.included_courses.includes(courseCode);
+
+      if (!isExcluded && isIncluded) {
+        calendarEvents.push(event);
+      }
     }
+
+    // Check if event goes to tasks
+    const goesToTasks = preferences.tasks.event_types.includes(eventType);
     if (goesToTasks) {
-      taskEvents.push(event);
+      // Apply tasks-specific course filters
+      const isExcluded = preferences.tasks.excluded_courses.includes(courseCode);
+      const isIncluded =
+        preferences.tasks.included_courses.length === 0 || // Empty = all courses
+        preferences.tasks.included_courses.includes(courseCode);
+
+      if (!isExcluded && isIncluded) {
+        taskEvents.push(event);
+      }
     }
   }
 
@@ -168,12 +136,11 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
       total_events_parsed: parsedICS.events.length,
       events_to_calendar: calendarEvents.length,
       events_to_tasks: taskEvents.length,
-      filtered_out: parsedICS.events.length - filteredEvents.length,
+      filtered_out: parsedICS.events.length - allEvents.length,
       sync_started_at: syncStartTime,
       sync_completed_at: new Date(),
     },
   };
 };
 
-export { syncFromICS, DEFAULT_PREFERENCES };
-export type { SyncPreferences, CentralSyncReport };
+export { syncFromICS };

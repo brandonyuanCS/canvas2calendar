@@ -1,7 +1,8 @@
 import * as GoogleService from './google.service.js';
 import { prisma } from '../lib/prisma.js';
 import { generateEventHash } from '../utils/hash.util.js';
-import type { CanvasEvent } from '../utils/ics-parser.js';
+import type { CanvasEvent } from '../types/canvas.js';
+import type { TaskSyncReport } from '../types/sync-reports.js';
 import type { tasks_v1 } from 'googleapis';
 
 // helper functions
@@ -337,21 +338,6 @@ export const deleteTask = async (userId: number, googleTaskListId: string, googl
 
   return { id: googleTaskId };
 };
-
-// Sync types
-export interface TaskSyncReport {
-  taskLists: {
-    created: Array<{ title: string; id: string }>;
-    existing: Array<{ title: string; id: string }>;
-  };
-  tasks: {
-    created: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
-    updated: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
-    deleted: Array<{ ics_uid: string; title: string; id: string; taskListTitle: string }>;
-    unchanged: Array<{ ics_uid: string; title: string; taskListTitle: string }>;
-  };
-  errors: Array<{ ics_uid?: string; courseCode?: string; error: string }>;
-}
 
 // Sync tasks from parsed ICS data, grouped by course
 export const syncTasks = async (userId: number, events: CanvasEvent[]): Promise<TaskSyncReport> => {

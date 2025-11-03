@@ -1,27 +1,5 @@
 import ICAL from 'ical.js';
-
-export interface CanvasEvent {
-  uid: string;
-  summary: string;
-  description: string;
-  dtstart: Date;
-  dtend: Date;
-  location?: string;
-  url?: string;
-  categories: string[];
-  created: Date;
-  lastModified: Date;
-  courseCode?: string;
-  eventType?: 'assignment' | 'event' | 'quiz' | 'discussion' | 'lecture';
-  isAllDay: boolean;
-}
-
-export interface ParsedICS {
-  events: CanvasEvent[];
-  calendarName?: string;
-  timezone?: string;
-  lastUpdated: Date;
-}
+import type { CanvasEvent, ParsedICS } from '../types/canvas.js';
 
 export class ICSParser {
   async fetchICS(url: string): Promise<string> {
@@ -68,12 +46,13 @@ export class ICSParser {
   // standard ical parsing + canvas-specific classifications
   private parseCanvasEvent(vevent: ICAL.Component): CanvasEvent {
     const event = new ICAL.Event(vevent);
+    const uid = event.uid;
     const summary = event.summary || '';
     const description = event.description || '';
-    const classification = this.classifyCanvasEvent(summary, description);
+    const classification = this.classifyCanvasEvent(uid, summary);
 
     return {
-      uid: event.uid,
+      uid,
       summary,
       description,
       dtstart: event.startDate ? event.startDate.toJSDate() : new Date(),
@@ -89,15 +68,13 @@ export class ICSParser {
   }
 
   private classifyCanvasEvent(
+    uid: string,
     summary: string,
-    description: string,
   ): {
     courseCode?: string;
     eventType: CanvasEvent['eventType'];
   } {
-    const text = `${summary} ${description}`.toLowerCase();
-
-    // trying to find course code - check multiple patterns
+    // Extract course code from summary
     let courseCode: string | undefined;
 
     // Pattern 1: At the start (e.g., "CSCE 331 - Assignment")
@@ -112,17 +89,17 @@ export class ICSParser {
       }
     }
 
-    // classifying event/assignment
+    // Classify event type based on Canvas UID (100% reliable)
+    // Canvas UIDs follow the pattern:
+    // - 'event-assignment-*' → All graded work (assignments, quizzes, discussions, etc.)
+    // - 'event-calendar-event-*' → Calendar events (seminars, meetings, office hours, etc.)
+    // - 'event-assignment-override-*' → Personalized due dates (still an assignment)
     let eventType: CanvasEvent['eventType'] = 'event';
 
-    if (text.includes('assignment') || text.includes('homework') || text.includes('due')) {
+    if (uid.includes('assignment')) {
       eventType = 'assignment';
-    } else if (text.includes('quiz') || text.includes('exam') || text.includes('test')) {
-      eventType = 'quiz';
-    } else if (text.includes('discussion') || text.includes('forum')) {
-      eventType = 'discussion';
-    } else if (text.includes('lecture') || text.includes('class') || text.includes('meeting')) {
-      eventType = 'lecture';
+    } else if (uid.includes('calendar-event')) {
+      eventType = 'event';
     }
 
     return { courseCode, eventType };

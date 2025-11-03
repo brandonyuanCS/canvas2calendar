@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
-import { DEFAULT_PREFERENCES } from '../services/sync.service.js';
+import { DEFAULT_PREFERENCES } from '../types/preferences.js';
+import { ICSParser } from '../utils/ics-parser.js';
 import { Router } from 'express';
 
 const router = Router();
@@ -119,14 +120,38 @@ router.put('/preferences', async (req, res) => {
       return res.status(400).json({ error: 'Preferences object is required' });
     }
 
-    if (!preferences.sync_rules) {
-      return res.status(400).json({ error: 'sync_rules is required in preferences' });
+    // Validate calendar settings (required)
+    if (!preferences.calendar) {
+      return res.status(400).json({ error: 'calendar settings are required in preferences' });
     }
 
-    if (!Array.isArray(preferences.sync_rules.calendar) || !Array.isArray(preferences.sync_rules.tasks)) {
-      return res.status(400).json({
-        error: 'sync_rules.calendar and sync_rules.tasks must be arrays',
-      });
+    if (!Array.isArray(preferences.calendar.event_types)) {
+      return res.status(400).json({ error: 'calendar.event_types must be an array' });
+    }
+
+    if (!Array.isArray(preferences.calendar.included_courses)) {
+      return res.status(400).json({ error: 'calendar.included_courses must be an array' });
+    }
+
+    if (!Array.isArray(preferences.calendar.excluded_courses)) {
+      return res.status(400).json({ error: 'calendar.excluded_courses must be an array' });
+    }
+
+    // Validate tasks settings (required)
+    if (!preferences.tasks) {
+      return res.status(400).json({ error: 'tasks settings are required in preferences' });
+    }
+
+    if (!Array.isArray(preferences.tasks.event_types)) {
+      return res.status(400).json({ error: 'tasks.event_types must be an array' });
+    }
+
+    if (!Array.isArray(preferences.tasks.included_courses)) {
+      return res.status(400).json({ error: 'tasks.included_courses must be an array' });
+    }
+
+    if (!Array.isArray(preferences.tasks.excluded_courses)) {
+      return res.status(400).json({ error: 'tasks.excluded_courses must be an array' });
     }
 
     const updatedUser = await prisma.user.update({
@@ -143,6 +168,117 @@ router.put('/preferences', async (req, res) => {
   } catch (error) {
     console.error('Error updating preferences:', error);
     return res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+// Get Canvas metadata (discovered courses, event types, date ranges)
+// This endpoint parses the user's ICS feed to provide metadata for settings UI
+router.get('/canvas-metadata', async (req, res) => {
+  try {
+    const userId = req.user!.id;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { canvas_ics_feed_url: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.canvas_ics_feed_url) {
+      return res.status(400).json({
+        error: 'No ICS feed URL configured',
+        message: 'Please set your Canvas ICS feed URL first',
+      });
+    }
+
+    const parser = new ICSParser();
+    const parsed = await parser.fetchAndParse(user.canvas_ics_feed_url);
+    const coursesMap = new Map<
+      string,
+      {
+        code: string;
+        eventCount: number;
+        eventTypes: Set<string>;
+      }
+    >();
+    const eventTypesMap = new Map<string, number>();
+    let earliest = new Date();
+    let latest = new Date(0);
+
+    for (const event of parsed.events) {
+      const eventType = event.eventType || 'event';
+
+      if (event.courseCode) {
+        if (!coursesMap.has(event.courseCode)) {
+          coursesMap.set(event.courseCode, {
+            code: event.courseCode,
+            eventCount: 0,
+            eventTypes: new Set(),
+          });
+        }
+        const courseInfo = coursesMap.get(event.courseCode)!;
+        courseInfo.eventCount++;
+        courseInfo.eventTypes.add(eventType);
+      }
+
+      // Track event type counts
+      eventTypesMap.set(eventType, (eventTypesMap.get(eventType) || 0) + 1);
+
+      // Track date range
+      if (event.dtstart < earliest) earliest = event.dtstart;
+      if (event.dtstart > latest) latest = event.dtstart;
+    }
+
+    // Convert courses map to array with additional info
+    const courses = Array.from(coursesMap.values()).map(course => ({
+      code: course.code,
+      eventCount: course.eventCount,
+      eventTypes: Array.from(course.eventTypes),
+    }));
+
+    // Sort courses by event count (descending) then alphabetically
+    courses.sort((a, b) => {
+      if (b.eventCount !== a.eventCount) {
+        return b.eventCount - a.eventCount;
+      }
+      return a.code.localeCompare(b.code);
+    });
+
+    return res.json({
+      success: true,
+      metadata: {
+        courses,
+        eventTypes: Object.fromEntries(eventTypesMap),
+        dateRange: {
+          earliest,
+          latest,
+        },
+        totalEvents: parsed.events.length,
+        calendarName: parsed.calendarName,
+        lastFetched: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching Canvas metadata:', error);
+
+    if (error instanceof Error) {
+      if (error.message.includes('fetch')) {
+        return res.status(502).json({
+          error: 'Failed to fetch ICS feed',
+          message: 'Could not connect to Canvas. Please check your ICS URL.',
+        });
+      }
+      if (error.message.includes('parse')) {
+        return res.status(400).json({
+          error: 'Failed to parse ICS feed',
+          message: 'The ICS feed format is invalid or corrupted.',
+        });
+      }
+    }
+
+    return res.status(500).json({ error: 'Failed to fetch Canvas metadata' });
   }
 });
 

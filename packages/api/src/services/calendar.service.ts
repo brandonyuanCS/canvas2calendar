@@ -3,7 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { generateEventHash } from '../utils/hash.util.js';
 import { ICSParser } from '../utils/ics-parser.js';
 import crypto from 'crypto';
-import type { CanvasEvent } from '../utils/ics-parser.js';
+import type { CanvasEvent } from '../types/canvas.js';
+import type { SyncReport } from '../types/sync-reports.js';
 import type { calendar_v3 } from 'googleapis';
 
 // helpers
@@ -360,15 +361,6 @@ export const deleteEvent = async (userId: number, googleEventId: string) => {
 
   return { id: googleEventId };
 };
-
-// Sync types
-export interface SyncReport {
-  created: Array<{ ics_uid: string; title: string; id: string }>;
-  updated: Array<{ ics_uid: string; title: string; id: string }>;
-  deleted: Array<{ ics_uid: string; title: string; id: string }>;
-  unchanged: Array<{ ics_uid: string; title: string }>;
-  errors: Array<{ ics_uid?: string; error: string }>;
-}
 
 // Sync events from parsed ICS data
 export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]): Promise<SyncReport> => {
