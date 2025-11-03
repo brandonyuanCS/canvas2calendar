@@ -22,3 +22,19 @@ export interface ParsedICS {
   timezone?: string;
   lastUpdated: Date;
 }
+
+export interface CanvasMetadata {
+  courses: Array<{
+    code: string;
+    eventCount: number;
+    eventTypes: string[];
+  }>;
+  eventTypes: Record<string, number>;
+  dateRange: {
+    earliest: string;
+    latest: string;
+  };
+  totalEvents: number;
+  calendarName?: string;
+  lastFetched: string;
+}
