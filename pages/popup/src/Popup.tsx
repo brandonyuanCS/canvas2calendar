@@ -442,7 +442,7 @@ export default function Popup() {
             onClick={() => chrome.runtime.openOptionsPage()}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-left hover:bg-gray-50">
             <div className="flex items-center justify-between">
-              <span className="font-medium text-gray-800">⚙️ Sync Preferences</span>
+              <span className="font-medium text-gray-800">Sync Preferences</span>
               <span className="text-gray-400">→</span>
             </div>
             <p className="mt-1 text-xs text-gray-500">Configure which events sync to calendar or tasks</p>
@@ -456,7 +456,7 @@ export default function Popup() {
           <h3 className="mb-3 font-semibold text-gray-800">Sync</h3>
 
           <button onClick={handleSync} disabled={loading} className="btn-primary mb-3">
-            {loading ? 'Syncing...' : '🔄 Sync Now'}
+            {loading ? 'Syncing...' : 'Sync Now'}
           </button>
 
           {syncReport && (
