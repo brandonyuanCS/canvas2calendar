@@ -29,7 +29,7 @@ export const processModuleConfig = (
   moduleName: ModuleNameType,
   isRecovering?: boolean,
 ) => {
-  if (moduleName === 'content-runtime' || moduleName === 'devtools-panel' || moduleName === 'tests') {
+  if (moduleName === 'tests') {
     return;
   }
 

@@ -32,9 +32,6 @@ export const recoverFeature = async (manifestObject: ManifestType, moduleName?: 
     if (existsSync(testZipFilePath)) {
       await rimraf(testZipFilePath);
     }
-  } else if (moduleName === 'devtools') {
-    recoverModule(manifestObject, moduleName as ModuleNameType);
-    recoverModule(manifestObject, 'devtools-panel');
   } else {
     recoverModule(manifestObject, moduleName as ModuleNameType);
   }

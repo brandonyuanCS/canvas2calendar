@@ -1,0 +1,47 @@
+{
+  "name": "@extension/api",
+  "version": "1.0",
+  "description": "chrome extension - api server",
+  "type": "module",
+  "private": true,
+  "sideEffects": false,
+  "files": [
+    "dist/**"
+  ],
+  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "scripts": {
+    "clean:bundle": "rimraf dist",
+    "clean:node_modules": "pnpx rimraf node_modules",
+    "clean:turbo": "rimraf .turbo",
+    "clean": "pnpm clean:bundle && pnpm clean:node_modules && pnpm clean:turbo",
+    "build": "tsc -b",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint .",
+    "lint:fix": "pnpm lint --fix",
+    "format": "prettier . --write --ignore-path ../.prettierignore",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google-cloud/tasks": "^6.2.0",
+    "@prisma/client": "^6.16.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "googleapis": "^126.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.16.2"
+  },
+  "devDependencies": {
+    "@extension/shared": "workspace:*",
+    "@extension/tsconfig": "workspace:*",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.15.21",
+    "tsx": "^4.19.4"
+  }
+}

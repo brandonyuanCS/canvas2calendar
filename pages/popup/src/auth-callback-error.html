@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Authentication Error - Canvas2Calendar</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 400px;
+    }
+    .error {
+      color: #dc2626;
+    }
+    h1 {
+      margin: 0 0 1rem 0;
+      font-size: 1.5rem;
+    }
+    p {
+      margin: 0.5rem 0;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="error">Authentication Error</h1>
+    <p>{{ERROR_MESSAGE}}</p>
+    <p>You can close this window and try again.</p>
+  </div>
+</body>
+</html>
+

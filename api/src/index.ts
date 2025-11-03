@@ -1,0 +1,24 @@
+// Load .env FIRST before any other imports
+import './lib/env.js';
+
+import routes from './routes/index.js';
+import cors from 'cors';
+import express, { json } from 'express';
+
+const app = express();
+const PORT = process.env.PORT || '3001';
+
+app.use(cors());
+app.use(json());
+app.use('/api', routes);
+// TODO this is wrong right? not sure why i wrote this
+// app.use('/calendar', routes);
+
+// dummy endpoint
+app.get('/helloworld', (req, res) => {
+  res.json({ status: 'hello world! API is running' });
+});
+
+app.listen(PORT, () => {
+  console.log('server is running on port', PORT);
+});
