@@ -32,7 +32,10 @@ const manifest = {
   description: '__MSG_extensionDescription__',
   host_permissions: ['<all_urls>'],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'identity'],
-  options_page: 'options/index.html',
+  options_ui: {
+    page: 'options/index.html',
+    open_in_tab: true,
+  },
   background: {
     service_worker: 'background.js',
     type: 'module',

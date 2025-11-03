@@ -1,3 +1,4 @@
+// @ts-expect-error - ical.js doesn't have type declarations
 import ICAL from 'ical.js';
 import type { CanvasEvent, ParsedICS } from '@extension/shared';
 
@@ -25,7 +26,8 @@ export class ICSParser {
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
 
-      const events = vevents.map(vevent => this.parseCanvasEvent(vevent));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const events = vevents.map((vevent: any) => this.parseCanvasEvent(vevent));
 
       return {
         events,
@@ -44,7 +46,8 @@ export class ICSParser {
   }
 
   // standard ical parsing + canvas-specific classifications
-  private parseCanvasEvent(vevent: ICAL.Component): CanvasEvent {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private parseCanvasEvent(vevent: any): CanvasEvent {
     const event = new ICAL.Event(vevent);
     const uid = event.uid;
     const summary = event.summary || '';
@@ -60,8 +63,8 @@ export class ICSParser {
       location: event.location || undefined,
       url: (vevent.getFirstPropertyValue('url') as string) || undefined,
       categories: (vevent.getFirstPropertyValue('categories') as string)?.split(',') || [],
-      created: (vevent.getFirstPropertyValue('created') as ICAL.Time)?.toJSDate() || new Date(),
-      lastModified: (vevent.getFirstPropertyValue('last-modified') as ICAL.Time)?.toJSDate() || new Date(),
+      created: (vevent.getFirstPropertyValue('created') as { toJSDate(): Date })?.toJSDate() || new Date(),
+      lastModified: (vevent.getFirstPropertyValue('last-modified') as { toJSDate(): Date })?.toJSDate() || new Date(),
       isAllDay: event.startDate ? event.startDate.isDate : false,
       ...classification,
     };

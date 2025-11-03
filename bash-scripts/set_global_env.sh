@@ -11,16 +11,19 @@ validate_is_boolean() {
   fi
 }
 
-# Validate if a key starts with CLI_CEB_ or CEB_
+# Validate if a key starts with CLI_CEB_ or is allowed in editable section
 validate_key() {
   local key="$1"
   local is_editable_section="${2:-false}"
 
   if [[ -n "$key" && ! "$key" =~ ^# ]]; then
-    if [[ "$is_editable_section" == true && ! "$key" =~ ^CEB_ ]]; then
-      echo "Invalid key: <$key>. All keys in the editable section must start with 'CEB_'."
-      exit 1
-    elif [[ "$is_editable_section" == false && ! "$key" =~ ^CLI_CEB_ ]]; then
+    if [[ "$is_editable_section" == true ]]; then
+      # Allow CEB_ prefixed keys and common environment variable patterns
+      if [[ ! "$key" =~ ^(CEB_|VITE_|GOOGLE_|DATABASE_|JWT_|PORT$) ]]; then
+        echo "Invalid key: <$key>. Keys in the editable section must start with 'CEB_', 'VITE_', 'GOOGLE_', 'DATABASE_', 'JWT_', or be 'PORT'."
+        exit 1
+      fi
+    elif [[ ! "$key" =~ ^CLI_CEB_ ]]; then
       echo "Invalid key: <$key>. All CLI keys must start with 'CLI_CEB_'."
       exit 1
     fi
@@ -79,7 +82,7 @@ create_new_file() {
     echo "# THOSE VALUES ARE EDITABLE"
 
     # Copy existing env values, without CLI section
-    grep -E '^CEB_' .env
+    grep -E '^(CEB_|VITE_|GOOGLE_|DATABASE_|JWT_|PORT=)' .env
   } > "$temp_file"
 
   mv "$temp_file" .env

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { auth, calendar, user, sync } from '@extension/shared';
+import { useEffect, useState } from 'react';
 import type { CentralSyncReport } from '@extension/shared';
-
-// Prefer env, fallback to localhost for dev
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import './Popup.css';
 
 type ApiSyncResponse = {
   success: boolean;
@@ -18,7 +17,6 @@ interface DebugLog {
 
 export default function Popup() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [token, setToken] = useState<string>('');
   const [userEmail, setUserEmail] = useState<string>('');
   const [icsUrl, setIcsUrl] = useState<string>('');
   const [icsUrlInput, setIcsUrlInput] = useState<string>('');
@@ -51,10 +49,9 @@ export default function Popup() {
   useEffect(() => {
     chrome.storage.local.get(['token', 'userEmail', 'debugLogs'], result => {
       if (result.token) {
-        setToken(result.token);
         setUserEmail(result.userEmail || '');
         setIsAuthenticated(true);
-        checkSetupStatus(result.token);
+        checkSetupStatus();
       }
 
       // Load debug logs
@@ -64,42 +61,18 @@ export default function Popup() {
     });
   }, []);
 
-  // API call helper
-  const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP ${response.status}`);
-    }
-
-    return response.json();
-  };
-
   // Check if calendar exists and ICS URL is set
-  const checkSetupStatus = async (authToken: string) => {
+  const checkSetupStatus = async () => {
     try {
       // Check calendar
-      const calendarResponse = await fetch(`${API_URL}/calendar`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      setHasCalendar(calendarResponse.ok);
+      const hasCalendarResult = await calendar.checkExists();
+      setHasCalendar(hasCalendarResult);
 
       // Check ICS URL
-      const icsResponse = await fetch(`${API_URL}/user/ics-url`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      if (icsResponse.ok) {
-        const data = await icsResponse.json();
-        setIcsUrl(data.ics_url || '');
-        setIcsUrlInput(data.ics_url || '');
+      const icsData = await user.getIcsUrl();
+      if (icsData?.ics_url) {
+        setIcsUrl(icsData.ics_url);
+        setIcsUrlInput(icsData.ics_url);
       }
     } catch (err) {
       console.error('Error checking setup status:', err);
@@ -115,7 +88,7 @@ export default function Popup() {
 
       // Get auth URL
       addDebugLog('info', 'Fetching auth URL from backend...');
-      const { authUrl } = await fetch(`${API_URL}/auth/google`).then(res => res.json());
+      const { authUrl } = await auth.getGoogleAuthUrl();
       addDebugLog('success', `Auth URL received`);
 
       // Open OAuth in new window
@@ -172,11 +145,10 @@ export default function Popup() {
                       addDebugLog('success', 'JWT token found in URL fragment!');
                       chrome.storage.local.set({ token: jwt, userEmail: emailFromHash || '' }, () => {
                         addDebugLog('success', `Logged in as: ${emailFromHash || ''}`);
-                        setToken(jwt);
                         setUserEmail(emailFromHash || '');
                         setIsAuthenticated(true);
                         setLoading(false);
-                        checkSetupStatus(jwt);
+                        checkSetupStatus();
                         chrome.windows.remove(windowId);
                         addDebugLog('info', '✓ OAuth complete!');
                       });
@@ -219,7 +191,6 @@ export default function Popup() {
 
   const handleLogout = () => {
     chrome.storage.local.remove(['token', 'userEmail'], () => {
-      setToken('');
       setUserEmail('');
       setIsAuthenticated(false);
       setHasCalendar(false);
@@ -235,13 +206,7 @@ export default function Popup() {
       setLoading(true);
       setError('');
 
-      await apiCall('/calendar', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'Canvas Sync Calendar',
-          description: 'Synced from Canvas',
-        }),
-      });
+      await calendar.create('Canvas Sync Calendar', 'Synced from Canvas');
 
       setHasCalendar(true);
     } catch (err) {
@@ -257,10 +222,7 @@ export default function Popup() {
       setLoading(true);
       setError('');
 
-      await apiCall('/user/ics-url', {
-        method: 'PUT',
-        body: JSON.stringify({ ics_url: icsUrlInput }),
-      });
+      await user.updateIcsUrl(icsUrlInput);
 
       setIcsUrl(icsUrlInput);
     } catch (err) {
@@ -277,9 +239,7 @@ export default function Popup() {
       setError('');
       setSyncReport(null);
 
-      const result = await apiCall('/sync', {
-        method: 'POST',
-      });
+      const result = await sync.performSync();
 
       setSyncReport(result);
     } catch (err) {
@@ -479,7 +439,7 @@ export default function Popup() {
       {hasCalendar && icsUrl && (
         <div className="mb-4">
           <button
-            onClick={() => alert('Preferences UI coming soon!')}
+            onClick={() => chrome.runtime.openOptionsPage()}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-left hover:bg-gray-50">
             <div className="flex items-center justify-between">
               <span className="font-medium text-gray-800">⚙️ Sync Preferences</span>
@@ -563,42 +523,6 @@ export default function Popup() {
           )}
         </div>
       )}
-
-      <style>{`
-        .btn-primary {
-          width: 100%;
-          padding: 10px;
-          background: #3b82f6;
-          color: white;
-          border-radius: 6px;
-          font-size: 14px;
-          font-weight: 500;
-          transition: background 0.2s;
-        }
-        .btn-primary:hover:not(:disabled) {
-          background: #2563eb;
-        }
-        .btn-primary:disabled {
-          background: #9ca3af;
-          cursor: not-allowed;
-        }
-        .btn-secondary {
-          padding: 8px;
-          background: #f3f4f6;
-          color: #374151;
-          border-radius: 6px;
-          font-size: 14px;
-          font-weight: 500;
-          transition: background 0.2s;
-        }
-        .btn-secondary:hover:not(:disabled) {
-          background: #e5e7eb;
-        }
-        .btn-secondary:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-      `}</style>
     </div>
   );
 }
