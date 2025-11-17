@@ -146,7 +146,7 @@ const Options = () => {
         <div className="error-state">
           <h2>Setup Required</h2>
           <p>Please configure your Canvas ICS URL in the extension popup first.</p>
-          <button onClick={() => window.close()} className="btn-primary">
+          <button onClick={() => window.close()} className="btn btn-primary">
             Close
           </button>
         </div>
@@ -167,13 +167,11 @@ const Options = () => {
           <button
             className={cn('nav-item', activeTab === 'user-prefs' && 'active')}
             onClick={() => setActiveTab('user-prefs')}>
-            <span className="nav-icon">⚙️</span>
             <span>User Preferences</span>
           </button>
           <button
             className={cn('nav-item', activeTab === 'extension-options' && 'active')}
             onClick={() => setActiveTab('extension-options')}>
-            <span className="nav-icon">🎨</span>
             <span>Extension Options</span>
           </button>
         </nav>
@@ -203,7 +201,7 @@ const Options = () => {
             <section className="settings-section">
               <h3>Auto-Sync</h3>
               <div className="setting-item">
-                <label className="checkbox-label">
+                <label className="checkbox-label checkbox-label-inline">
                   <input
                     type="checkbox"
                     checked={preferences.sync?.auto_sync_enabled || false}
@@ -244,7 +242,7 @@ const Options = () => {
               <h3>Calendar Settings</h3>
 
               <div className="setting-item">
-                <span className="setting-label">Event types to sync to Calendar:</span>
+                <h4 className="setting-label">Event types to sync to Calendar</h4>
                 <div className="checkbox-group">
                   <label className="checkbox-label">
                     <input
@@ -278,7 +276,7 @@ const Options = () => {
 
               {metadata && metadata.courses.length > 0 && (
                 <div className="setting-item">
-                  <span className="setting-label">Courses to sync to Calendar:</span>
+                  <h4 className="setting-label">Courses to sync to Calendar</h4>
                   <div className="course-list">
                     {metadata.courses.map(course => {
                       const synced = isCourseSynced(course.code, 'calendar');
@@ -307,7 +305,7 @@ const Options = () => {
               <h3>Tasks Settings</h3>
 
               <div className="setting-item">
-                <span className="setting-label">Event types to sync to Tasks:</span>
+                <h4 className="setting-label">Event types to sync to Tasks</h4>
                 <div className="checkbox-group">
                   <label className="checkbox-label">
                     <input
@@ -341,7 +339,7 @@ const Options = () => {
 
               {metadata && metadata.courses.length > 0 && (
                 <div className="setting-item">
-                  <span className="setting-label">Courses to sync to Tasks:</span>
+                  <h4 className="setting-label">Courses to sync to Tasks</h4>
                   <div className="course-list">
                     {metadata.courses.map(course => {
                       const synced = isCourseSynced(course.code, 'tasks');
@@ -365,7 +363,9 @@ const Options = () => {
               )}
 
               <div className="setting-item">
-                <label htmlFor="task-organization">Task organization:</label>
+                <label htmlFor="task-organization" className="setting-label">
+                  Task organization
+                </label>
                 <select
                   id="task-organization"
                   value={preferences.tasks.task_organization}
@@ -382,7 +382,9 @@ const Options = () => {
               </div>
 
               <div className="setting-item">
-                <label htmlFor="task-naming">Task list naming:</label>
+                <label htmlFor="task-naming" className="setting-label">
+                  Task list naming
+                </label>
                 <select
                   id="task-naming"
                   value={preferences.tasks.task_list_naming}
@@ -402,7 +404,7 @@ const Options = () => {
 
             {/* Save Button */}
             <div className="settings-actions">
-              <button onClick={handleSavePreferences} disabled={saving} className="btn-primary btn-large">
+              <button onClick={handleSavePreferences} disabled={saving} className="btn btn-primary btn-md">
                 {saving ? 'Saving...' : 'Save Preferences'}
               </button>
               <p className="help-text">Changes will take effect on the next sync</p>
@@ -419,10 +421,12 @@ const Options = () => {
             <section className="settings-section">
               <h3>Appearance</h3>
               <div className="setting-item">
-                <span className="setting-label">Theme:</span>
-                <ToggleButton onClick={exampleThemeStorage.toggle}>
-                  {isLight ? '☀️ Light Mode' : '🌙 Dark Mode'}
-                </ToggleButton>
+                <h4 className="setting-label">Theme</h4>
+                <div style={{ marginTop: 'var(--space-xs)' }}>
+                  <ToggleButton onClick={exampleThemeStorage.toggle}>
+                    {isLight ? '☀️ Light Mode' : '🌙 Dark Mode'}
+                  </ToggleButton>
+                </div>
               </div>
             </section>
 
