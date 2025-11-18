@@ -36,6 +36,37 @@ const detectTaskPreferenceChanges = (
   return { removedCourses, addedCourses };
 };
 
+/**
+ * Detects changes in calendar preferences between two sync operations
+ * @param oldPrefs - Preferences from the last sync (null if first sync)
+ * @param newPrefs - Current preferences
+ * @returns Object containing arrays of removed and added courses
+ */
+const detectCalendarPreferenceChanges = (
+  oldPrefs: SyncPreferences | null,
+  newPrefs: SyncPreferences,
+): {
+  removedCourses: string[];
+  addedCourses: string[];
+} => {
+  // If no old prefs (first sync), no courses to remove
+  if (!oldPrefs) {
+    return { removedCourses: [], addedCourses: [] };
+  }
+
+  // Simply use the arrays as-is (no normalization needed)
+  const oldIncluded = oldPrefs.calendar.included_courses;
+  const newIncluded = newPrefs.calendar.included_courses;
+
+  const oldSet = new Set(oldIncluded);
+  const newSet = new Set(newIncluded);
+
+  const removedCourses = oldIncluded.filter(c => !newSet.has(c));
+  const addedCourses = newIncluded.filter(c => !oldSet.has(c));
+
+  return { removedCourses, addedCourses };
+};
+
 // Central sync orchestration
 const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSyncReport> => {
   const syncStartTime = new Date();
@@ -103,7 +134,8 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
     const goesToCalendar = preferences.calendar.event_types.includes(eventType);
     if (goesToCalendar) {
       // Apply calendar-specific course filters
-      const isIncluded = preferences.calendar.included_courses.includes(courseCode);
+      // Events without a course code are always included
+      const isIncluded = !courseCode || preferences.calendar.included_courses.includes(courseCode);
 
       if (isIncluded) {
         calendarEvents.push(event);
@@ -114,7 +146,8 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
     const goesToTasks = preferences.tasks.event_types.includes(eventType);
     if (goesToTasks) {
       // Apply tasks-specific course filters
-      const isIncluded = preferences.tasks.included_courses.includes(courseCode);
+      // Events without a course code are always included
+      const isIncluded = !courseCode || preferences.tasks.included_courses.includes(courseCode);
 
       if (isIncluded) {
         taskEvents.push(event);
@@ -122,12 +155,13 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
     }
   }
 
-  // Detect preference changes for tasks
+  // Detect preference changes for both calendar and tasks
+  const calendarPrefsChanges = detectCalendarPreferenceChanges(lastSyncedPrefs, preferences);
   const taskPrefsChanges = detectTaskPreferenceChanges(lastSyncedPrefs, preferences);
 
   // 5 & 6. Sync to respective services in parallel
   const [calendarReport, tasksReport] = await Promise.all([
-    CalendarService.syncCalendarEvents(userId, calendarEvents),
+    CalendarService.syncCalendarEvents(userId, calendarEvents, calendarPrefsChanges),
     TaskListService.syncTasks(userId, taskEvents, taskPrefsChanges),
   ]);
 
@@ -135,7 +169,7 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
   await prisma.user.update({
     where: { id: userId },
     // @ts-expect-error - Prisma client needs regeneration after migration
-    data: { last_synced_preferences: user.preferences },
+    data: { last_synced_preferences: preferences },
   });
 
   // 7. Combine reports

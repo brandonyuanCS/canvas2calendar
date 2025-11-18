@@ -56,6 +56,7 @@ model calendar_event {
   is_all_day      Boolean  @default(false)
   location        String?
   event_hash      String?
+  course_code     String?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -64,6 +65,7 @@ model calendar_event {
 
   @@index([calendar_id])
   @@index([ics_uid])
+  @@index([course_code])
 }
 
 model task_list {

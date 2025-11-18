@@ -234,6 +234,7 @@ export const updateEvent = async (
     is_all_day?: boolean;
     location?: string;
     event_hash?: string;
+    course_code?: string | null;
   },
 ) => {
   const { user, calendarRecord } = await getUserAndCalendar(userId);
@@ -313,6 +314,7 @@ export const updateEvent = async (
       ...(updates.is_all_day !== undefined && { is_all_day: updates.is_all_day }),
       ...(updates.location !== undefined && { location: updates.location?.trim() }),
       ...(updates.event_hash && { event_hash: updates.event_hash }),
+      ...(updates.course_code !== undefined && { course_code: updates.course_code }),
     },
   });
 
@@ -362,7 +364,11 @@ export const deleteEvent = async (userId: number, googleEventId: string) => {
 };
 
 // Sync events from parsed ICS data
-export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]): Promise<SyncReport> => {
+export const syncCalendarEvents = async (
+  userId: number,
+  events: CanvasEvent[],
+  prefsChanges?: { removedCourses: string[]; addedCourses: string[] },
+): Promise<SyncReport> => {
   const report: SyncReport = {
     created: [],
     updated: [],
@@ -392,6 +398,40 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
 
     const calendarRecord = user.calendars[0];
 
+    // 1.5. Delete events for courses removed from preferences
+    // Note: This handles events that have course_code populated
+    // Events without course_code (created before migration) are handled by normal deletion logic below
+    if (prefsChanges && prefsChanges.removedCourses.length > 0) {
+      // Find all events for removed courses
+      const eventsToDelete = await prisma.calendar_event.findMany({
+        where: {
+          calendar_id: calendarRecord.id,
+          // @ts-expect-error - Prisma client needs regeneration after migration
+          course_code: { in: prefsChanges.removedCourses },
+        },
+      });
+
+      // Filter to only Canvas-synced events (ics_uid starts with 'event-')
+      const canvasEventsToDelete = eventsToDelete.filter(e => e.ics_uid.startsWith('event-'));
+
+      // Delete from Google Calendar and database
+      for (const eventToDelete of canvasEventsToDelete) {
+        try {
+          await deleteEvent(userId, eventToDelete.google_event_id);
+          report.deleted.push({
+            ics_uid: eventToDelete.ics_uid,
+            title: eventToDelete.title,
+            id: eventToDelete.google_event_id,
+          });
+        } catch (error) {
+          report.errors.push({
+            ics_uid: eventToDelete.ics_uid,
+            error: error instanceof Error ? error.message : 'Failed to delete event',
+          });
+        }
+      }
+    }
+
     // 2. Load existing events from DB
     const existingEvents = await prisma.calendar_event.findMany({
       where: { calendar_id: calendarRecord.id },
@@ -399,7 +439,9 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
 
     // 3. Build maps by ics_uid
     const existingEventMap = new Map(existingEvents.map(e => [e.ics_uid, e]));
-    const incomingEventMap = new Map(events.map(e => [e.uid, { event: e, hash: generateEventHash(e) }]));
+    const incomingEventMap = new Map(
+      events.map(e => [e.uid, { event: e, hash: generateEventHash(e), courseCode: e.courseCode }]),
+    );
 
     // 4. Determine operations (create/update/delete)
 
@@ -420,10 +462,14 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
             event_hash: incomingHash,
           });
 
-          // Update the ics_uid in DB to match the Canvas UID
+          // Update the ics_uid and course_code in DB to match the Canvas UID
           await prisma.calendar_event.update({
             where: { google_event_id: createdEvent.id },
-            data: { ics_uid: icsUid },
+            data: {
+              ics_uid: icsUid,
+              // @ts-expect-error - Prisma client needs regeneration after migration
+              course_code: incomingEvent.courseCode || null,
+            },
           });
 
           report.created.push({
@@ -441,6 +487,7 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
             is_all_day: incomingEvent.isAllDay,
             location: incomingEvent.location,
             event_hash: incomingHash,
+            course_code: incomingEvent.courseCode || null,
           });
 
           report.updated.push({
@@ -450,6 +497,22 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
           });
         } else {
           // UNCHANGED: Event exists and hash matches
+          // Always update course_code if it's missing (for existing events from before migration)
+          // @ts-expect-error - Prisma client needs regeneration after migration
+          if (!existingEvent.course_code && incomingEvent.courseCode) {
+            try {
+              await prisma.calendar_event.update({
+                where: { google_event_id: existingEvent.google_event_id },
+                data: {
+                  // @ts-expect-error - Prisma client needs regeneration after migration
+                  course_code: incomingEvent.courseCode,
+                },
+              });
+            } catch {
+              // Silently continue if update fails
+            }
+          }
+
           report.unchanged.push({
             ics_uid: icsUid,
             title: incomingEvent.summary,
@@ -493,8 +556,16 @@ export const syncCalendarEvents = async (userId: number, events: CanvasEvent[]):
   }
 };
 
-// Backward-compatible wrapper: fetch ICS and sync
-export const syncCalendarFromICS = async (userId: number, icsUrl?: string): Promise<SyncReport> => {
+/**
+ * @deprecated Use SyncService.syncFromICS instead, which handles preference changes and orchestrates both calendar and tasks sync.
+ * This function is kept for backward compatibility only.
+ * Backward-compatible wrapper: fetch ICS and sync
+ */
+export const syncCalendarFromICS = async (
+  userId: number,
+  icsUrl?: string,
+  prefsChanges?: { removedCourses: string[]; addedCourses: string[] },
+): Promise<SyncReport> => {
   try {
     // 1. Get user and ICS URL
     const user = await prisma.user.findUnique({
@@ -514,8 +585,8 @@ export const syncCalendarFromICS = async (userId: number, icsUrl?: string): Prom
     const parser = new ICSParser();
     const parsedICS = await parser.fetchAndParse(feedUrl);
 
-    // 3. Delegate to the refactored function
-    return await syncCalendarEvents(userId, parsedICS.events);
+    // 3. Delegate to the refactored function (now with prefsChanges support)
+    return await syncCalendarEvents(userId, parsedICS.events, prefsChanges);
   } catch (error) {
     return {
       created: [],
