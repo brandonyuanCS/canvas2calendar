@@ -55,6 +55,8 @@ const Options = () => {
   const handleSavePreferences = async () => {
     if (!preferences) return;
 
+    const MIN_TIME = 1000;
+    const startTime = Date.now();
     try {
       setSaving(true);
       setError('');
@@ -67,7 +69,11 @@ const Options = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save preferences');
     } finally {
-      setSaving(false);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      if (duration < MIN_TIME) {
+        setTimeout(() => setSaving(false), MIN_TIME - duration);
+      }
     }
   };
 
