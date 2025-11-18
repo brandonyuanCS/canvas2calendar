@@ -10,7 +10,7 @@ interface IContentBuilderProps {
   matchesDir: string;
   srcDir: string;
   rootDir: string;
-  contentName: 'content' | 'content-ui';
+  contentName: 'content-ui';
   withTw: boolean;
 }
 

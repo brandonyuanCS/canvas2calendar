@@ -31,7 +31,7 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   host_permissions: ['<all_urls>'],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel', 'identity'],
+  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity'],
   options_ui: {
     page: 'options/index.html',
     open_in_tab: true,
@@ -48,14 +48,6 @@ const manifest = {
     '128': 'icon-128.png',
   },
   content_scripts: [
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content/all.iife.js'],
-    },
-    {
-      matches: ['https://example.com/*'],
-      js: ['content/example.iife.js'],
-    },
     {
       matches: ['http://*/*', 'https://*/*', '<all_urls>'],
       js: ['content-ui/all.iife.js'],
@@ -75,9 +67,6 @@ const manifest = {
       matches: ['*://*/*'],
     },
   ],
-  side_panel: {
-    default_path: 'side-panel/index.html',
-  },
 } satisfies ManifestType;
 
 export default manifest;
