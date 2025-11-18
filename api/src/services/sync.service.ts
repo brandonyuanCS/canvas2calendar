@@ -3,30 +3,7 @@ import * as TaskListService from './taskList.service.js';
 import { prisma } from '../lib/prisma.js';
 import { ICSParser } from '../utils/ics-parser.js';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
-import type { CanvasEvent, SyncPreferences, CentralSyncReport, SyncReport, TaskSyncReport } from '@extension/shared';
-
-// Helper to create empty reports
-const createEmptySyncReport = (): SyncReport => ({
-  created: [],
-  updated: [],
-  deleted: [],
-  unchanged: [],
-  errors: [],
-});
-
-const createEmptyTaskSyncReport = (): TaskSyncReport => ({
-  taskLists: {
-    created: [],
-    existing: [],
-  },
-  tasks: {
-    created: [],
-    updated: [],
-    deleted: [],
-    unchanged: [],
-  },
-  errors: [],
-});
+import type { CanvasEvent, SyncPreferences, CentralSyncReport } from '@extension/shared';
 
 // Central sync orchestration
 const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSyncReport> => {
@@ -118,12 +95,8 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
 
   // 5 & 6. Sync to respective services in parallel
   const [calendarReport, tasksReport] = await Promise.all([
-    calendarEvents.length > 0
-      ? CalendarService.syncCalendarEvents(userId, calendarEvents)
-      : Promise.resolve(createEmptySyncReport()),
-    taskEvents.length > 0
-      ? TaskListService.syncTasks(userId, taskEvents)
-      : Promise.resolve(createEmptyTaskSyncReport()),
+    CalendarService.syncCalendarEvents(userId, calendarEvents),
+    TaskListService.syncTasks(userId, taskEvents),
   ]);
 
   // 7. Combine reports

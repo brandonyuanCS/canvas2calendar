@@ -3,6 +3,8 @@ import { requireAuth } from '../middleware/auth.middleware.js';
 import { ICSParser } from '../utils/ics-parser.js';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
 import { Router } from 'express';
+import type { SyncPreferences } from '@extension/shared';
+import type { Prisma } from '@prisma/client';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,9 +55,52 @@ router.put('/ics-url', async (req, res) => {
       });
     }
 
+    // Parse ICS feed to extract unique course codes
+    let uniqueCourses: string[] = [];
+    try {
+      const parser = new ICSParser();
+      const parsed = await parser.fetchAndParse(ics_url.trim());
+      uniqueCourses = Array.from(
+        new Set(parsed.events.map(event => event.courseCode).filter((code): code is string => Boolean(code))),
+      ).sort();
+    } catch (error) {
+      console.error('Error parsing ICS feed during URL update:', error);
+      // Continue with URL update even if parsing fails - all_courses will remain unchanged
+    }
+
+    // Get current user preferences
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { preferences: true },
+    });
+    const currentPrefs = (user?.preferences as unknown as Partial<SyncPreferences>) || {};
+
+    // Merge with defaults and update all_courses (only if parsing succeeded)
+    const updatedPreferences: SyncPreferences = {
+      sync: { ...DEFAULT_PREFERENCES.sync!, ...currentPrefs.sync },
+      calendar: {
+        ...DEFAULT_PREFERENCES.calendar,
+        ...currentPrefs.calendar,
+        all_courses: uniqueCourses.length > 0 ? uniqueCourses : currentPrefs.calendar?.all_courses || [],
+      },
+      tasks: {
+        ...DEFAULT_PREFERENCES.tasks,
+        ...currentPrefs.tasks,
+        all_courses: uniqueCourses.length > 0 ? uniqueCourses : currentPrefs.tasks?.all_courses || [],
+      },
+      data_management: {
+        ...DEFAULT_PREFERENCES.data_management!,
+        ...currentPrefs.data_management,
+      },
+    };
+
+    // Update both ICS URL and preferences in a single transaction
     const updatedUser = await prisma.user.update({
       where: { id: req.user!.id },
-      data: { canvas_ics_feed_url: ics_url.trim() },
+      data: {
+        canvas_ics_feed_url: ics_url.trim(),
+        preferences: updatedPreferences as unknown as Prisma.InputJsonValue,
+      },
       select: { canvas_ics_feed_url: true },
     });
 
@@ -133,8 +178,8 @@ router.put('/preferences', async (req, res) => {
       return res.status(400).json({ error: 'calendar.included_courses must be an array' });
     }
 
-    if (!Array.isArray(preferences.calendar.excluded_courses)) {
-      return res.status(400).json({ error: 'calendar.excluded_courses must be an array' });
+    if (!Array.isArray(preferences.calendar.all_courses)) {
+      return res.status(400).json({ error: 'calendar.all_courses must be an array' });
     }
 
     // Validate tasks settings (required)
@@ -150,8 +195,8 @@ router.put('/preferences', async (req, res) => {
       return res.status(400).json({ error: 'tasks.included_courses must be an array' });
     }
 
-    if (!Array.isArray(preferences.tasks.excluded_courses)) {
-      return res.status(400).json({ error: 'tasks.excluded_courses must be an array' });
+    if (!Array.isArray(preferences.tasks.all_courses)) {
+      return res.status(400).json({ error: 'tasks.all_courses must be an array' });
     }
 
     const updatedUser = await prisma.user.update({

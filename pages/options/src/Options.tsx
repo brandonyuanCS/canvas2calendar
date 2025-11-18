@@ -4,7 +4,7 @@ import { user, withErrorBoundary, withSuspense, useStorage } from '@extension/sh
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
 import { useEffect, useState } from 'react';
-import type { SyncPreferences, CanvasEventType, CanvasMetadata } from '@extension/shared';
+import type { SyncPreferences, CanvasEventType } from '@extension/shared';
 
 type TabType = 'user-prefs' | 'extension-options';
 
@@ -12,7 +12,6 @@ const Options = () => {
   const { isLight } = useStorage(exampleThemeStorage);
   const [activeTab, setActiveTab] = useState<TabType>('user-prefs');
   const [preferences, setPreferences] = useState<SyncPreferences | null>(null);
-  const [metadata, setMetadata] = useState<CanvasMetadata | null>(null);
   const [icsUrl, setIcsUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,19 +35,6 @@ const Options = () => {
       // Load ICS URL
       const icsResponse = await user.getIcsUrl();
       setIcsUrl(icsResponse?.ics_url || null);
-
-      // Load Canvas metadata (if ICS URL exists)
-      if (icsResponse?.ics_url) {
-        try {
-          const metadataResponse = (await user.getCanvasMetadata()) as { success: boolean; metadata: CanvasMetadata };
-          if (metadataResponse.success) {
-            setMetadata(metadataResponse.metadata);
-          }
-        } catch (err) {
-          console.error('Failed to load Canvas metadata:', err);
-          // Don't block if metadata fails
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
     } finally {
@@ -90,43 +76,31 @@ const Options = () => {
     if (!preferences) return;
 
     const currentIncluded = preferences[section].included_courses;
-    const currentExcluded = preferences[section].excluded_courses;
-
     let newIncluded = [...currentIncluded];
-    let newExcluded = [...currentExcluded];
 
     if (include) {
-      // Add to included, remove from excluded
       if (!newIncluded.includes(courseCode)) {
         newIncluded.push(courseCode);
       }
-      newExcluded = newExcluded.filter(c => c !== courseCode);
     } else {
-      // Add to excluded, remove from included
-      if (!newExcluded.includes(courseCode)) {
-        newExcluded.push(courseCode);
-      }
       newIncluded = newIncluded.filter(c => c !== courseCode);
     }
 
     updatePreference(section, {
       included_courses: newIncluded,
-      excluded_courses: newExcluded,
     });
   };
 
   const isCourseSynced = (courseCode: string, section: 'calendar' | 'tasks'): boolean | null => {
     if (!preferences) return null;
     const included = preferences[section].included_courses;
-    const excluded = preferences[section].excluded_courses;
 
-    if (included.length > 0) {
-      return included.includes(courseCode);
+    // Empty array means all courses are included
+    if (included.length === 0) {
+      return true;
     }
-    if (excluded.includes(courseCode)) {
-      return false;
-    }
-    return true; // Default: all courses included
+
+    return included.includes(courseCode);
   };
 
   if (loading) {
@@ -274,22 +248,21 @@ const Options = () => {
                 <p className="setting-description">Select which Canvas event types to sync to Google Calendar</p>
               </div>
 
-              {metadata && metadata.courses.length > 0 && (
+              {preferences.calendar.all_courses.length > 0 && (
                 <div className="setting-item">
                   <h4 className="setting-label">Courses to sync to Calendar</h4>
                   <div className="course-list">
-                    {metadata.courses.map(course => {
-                      const synced = isCourseSynced(course.code, 'calendar');
+                    {preferences.calendar.all_courses.map(courseCode => {
+                      const synced = isCourseSynced(courseCode, 'calendar');
                       return (
-                        <div key={course.code} className="course-item">
+                        <div key={courseCode} className="course-item">
                           <label className="checkbox-label">
                             <input
                               type="checkbox"
                               checked={synced === true}
-                              onChange={e => toggleCourse(course.code, 'calendar', e.target.checked)}
+                              onChange={e => toggleCourse(courseCode, 'calendar', e.target.checked)}
                             />
-                            <span className="course-name">{course.code}</span>
-                            <span className="course-count">({course.eventCount} events)</span>
+                            <span className="course-name">{courseCode}</span>
                           </label>
                         </div>
                       );
@@ -337,22 +310,21 @@ const Options = () => {
                 <p className="setting-description">Select which Canvas event types to sync to Google Tasks</p>
               </div>
 
-              {metadata && metadata.courses.length > 0 && (
+              {preferences.tasks.all_courses.length > 0 && (
                 <div className="setting-item">
                   <h4 className="setting-label">Courses to sync to Tasks</h4>
                   <div className="course-list">
-                    {metadata.courses.map(course => {
-                      const synced = isCourseSynced(course.code, 'tasks');
+                    {preferences.tasks.all_courses.map(courseCode => {
+                      const synced = isCourseSynced(courseCode, 'tasks');
                       return (
-                        <div key={course.code} className="course-item">
+                        <div key={courseCode} className="course-item">
                           <label className="checkbox-label">
                             <input
                               type="checkbox"
                               checked={synced === true}
-                              onChange={e => toggleCourse(course.code, 'tasks', e.target.checked)}
+                              onChange={e => toggleCourse(courseCode, 'tasks', e.target.checked)}
                             />
-                            <span className="course-name">{course.code}</span>
-                            <span className="course-count">({course.eventCount} events)</span>
+                            <span className="course-name">{courseCode}</span>
                           </label>
                         </div>
                       );

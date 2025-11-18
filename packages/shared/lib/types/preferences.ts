@@ -13,7 +13,7 @@ export interface SyncPreferences {
   calendar: {
     event_types: CanvasEventType[];
     included_courses: string[];
-    excluded_courses: string[];
+    all_courses: string[];
     color_coding_enabled: boolean;
     course_colors: Record<string, string>;
     default_calendar_id?: string;
@@ -22,7 +22,7 @@ export interface SyncPreferences {
   tasks: {
     event_types: CanvasEventType[];
     included_courses: string[];
-    excluded_courses: string[];
+    all_courses: string[];
     task_list_naming: TaskListNaming;
     task_organization: TaskOrganization;
   };
@@ -47,7 +47,7 @@ export const DEFAULT_PREFERENCES: SyncPreferences = {
   calendar: {
     event_types: ['event'],
     included_courses: [],
-    excluded_courses: [],
+    all_courses: [],
     color_coding_enabled: false,
     course_colors: {},
     default_calendar_id: undefined,
@@ -55,7 +55,7 @@ export const DEFAULT_PREFERENCES: SyncPreferences = {
   tasks: {
     event_types: ['assignment'],
     included_courses: [],
-    excluded_courses: [],
+    all_courses: [],
     task_list_naming: 'code',
     task_organization: 'per_course',
   },
