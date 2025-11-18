@@ -339,7 +339,11 @@ export const deleteTask = async (userId: number, googleTaskListId: string, googl
 };
 
 // Sync tasks from parsed ICS data, grouped by course
-export const syncTasks = async (userId: number, events: CanvasEvent[]): Promise<TaskSyncReport> => {
+export const syncTasks = async (
+  userId: number,
+  events: CanvasEvent[],
+  prefsChanges?: { removedCourses: string[]; addedCourses: string[] },
+): Promise<TaskSyncReport> => {
   const report: TaskSyncReport = {
     taskLists: {
       created: [],
@@ -368,13 +372,58 @@ export const syncTasks = async (userId: number, events: CanvasEvent[]): Promise<
       eventsByCourse.get(courseCode)!.push(event);
     }
 
-    // 3. For each course, find or create task list
+    // 3. Create Google Tasks client
     const tasksClient = GoogleService.getGoogleTasksClient({
       access_token: user.google_access_token,
       refresh_token: user.google_refresh_token,
       expiry_date: user.google_token_expires_at?.getTime(),
     });
 
+    // 3.5. Delete task lists for courses removed from preferences
+    if (prefsChanges && prefsChanges.removedCourses.length > 0) {
+      for (const courseCode of prefsChanges.removedCourses) {
+        try {
+          const taskList = await prisma.task_list.findFirst({
+            where: { user_id: userId, title: courseCode },
+            include: { tasks: true },
+          });
+
+          if (taskList) {
+            // Delete from Google Tasks
+            await tasksClient.tasklists.delete({
+              tasklist: taskList.google_task_list_id,
+            });
+
+            // Delete tasks from DB
+            await prisma.task.deleteMany({
+              where: { task_list_id: taskList.id },
+            });
+
+            // Delete task list from DB
+            await prisma.task_list.delete({
+              where: { id: taskList.id },
+            });
+
+            // Report deletions
+            for (const task of taskList.tasks) {
+              report.tasks.deleted.push({
+                ics_uid: task.ics_uid,
+                title: task.title,
+                id: task.google_task_id,
+                taskListTitle: courseCode,
+              });
+            }
+          }
+        } catch (error) {
+          report.errors.push({
+            courseCode,
+            error: error instanceof Error ? error.message : 'Failed to delete task list',
+          });
+        }
+      }
+    }
+
+    // 4. For each course with events, find or create task list and sync tasks
     for (const [courseCode, courseEvents] of eventsByCourse) {
       try {
         // Find existing task list for this course

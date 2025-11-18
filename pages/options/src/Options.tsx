@@ -30,7 +30,17 @@ const Options = () => {
 
       // Load preferences
       const prefsResponse = await user.getPreferences();
-      setPreferences(prefsResponse.preferences);
+      const loadedPrefs = prefsResponse.preferences;
+
+      // Migrate empty included_courses to explicit lists
+      if (loadedPrefs.calendar.included_courses.length === 0 && loadedPrefs.calendar.all_courses.length > 0) {
+        loadedPrefs.calendar.included_courses = [...loadedPrefs.calendar.all_courses];
+      }
+      if (loadedPrefs.tasks.included_courses.length === 0 && loadedPrefs.tasks.all_courses.length > 0) {
+        loadedPrefs.tasks.included_courses = [...loadedPrefs.tasks.all_courses];
+      }
+
+      setPreferences(loadedPrefs);
 
       // Load ICS URL
       const icsResponse = await user.getIcsUrl();
@@ -75,15 +85,26 @@ const Options = () => {
   const toggleCourse = (courseCode: string, section: 'calendar' | 'tasks', include: boolean) => {
     if (!preferences) return;
 
-    const currentIncluded = preferences[section].included_courses;
-    let newIncluded = [...currentIncluded];
+    const currentIncluded = preferences[section]?.included_courses || [];
+    const allCourses = preferences[section]?.all_courses || [];
+
+    let newIncluded: string[];
 
     if (include) {
-      if (!newIncluded.includes(courseCode)) {
-        newIncluded.push(courseCode);
+      // When checking: if empty, just add this one course (user unchecked all, now checking one)
+      // Otherwise, add to existing list
+      if (currentIncluded.length === 0) {
+        newIncluded = [courseCode];
+      } else if (!currentIncluded.includes(courseCode)) {
+        newIncluded = [...currentIncluded, courseCode];
+      } else {
+        newIncluded = currentIncluded;
       }
     } else {
-      newIncluded = newIncluded.filter(c => c !== courseCode);
+      // When unchecking: if empty (default "all courses" state), expand to all courses first
+      // Then remove the selected course
+      const explicitIncluded = currentIncluded.length === 0 ? [...allCourses] : [...currentIncluded];
+      newIncluded = explicitIncluded.filter(c => c !== courseCode);
     }
 
     updatePreference(section, {
@@ -93,13 +114,10 @@ const Options = () => {
 
   const isCourseSynced = (courseCode: string, section: 'calendar' | 'tasks'): boolean | null => {
     if (!preferences) return null;
-    const included = preferences[section].included_courses;
+    const included = preferences[section]?.included_courses || [];
 
-    // Empty array means all courses are included
-    if (included.length === 0) {
-      return true;
-    }
-
+    // Simply check if the course is in the array
+    // Empty array means no courses selected (user unchecked all)
     return included.includes(courseCode);
   };
 
