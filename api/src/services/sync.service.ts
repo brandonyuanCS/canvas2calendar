@@ -1,9 +1,17 @@
 import * as CalendarService from './calendar.service.js';
+import * as GoogleService from './google.service.js';
 import * as TaskListService from './taskList.service.js';
 import { prisma } from '../lib/prisma.js';
 import { ICSParser } from '../utils/ics-parser.js';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
 import type { CanvasEvent, SyncPreferences, CentralSyncReport } from '@extension/shared';
+
+type ResetReport = {
+  calendars: { deleted: number; errors: Array<{ calendarId: string; error: string }> };
+  events: { deleted: number; errors: Array<{ eventId: string; error: string }> };
+  taskLists: { deleted: number; errors: Array<{ taskListId: string; error: string }> };
+  tasks: { deleted: number; errors: Array<{ taskId: string; error: string }> };
+};
 
 /**
  * Detects changes in task preferences between two sync operations
@@ -187,4 +195,125 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
   };
 };
 
-export { syncFromICS };
+const resetAllData = async (userId: number): Promise<ResetReport> => {
+  const report: ResetReport = {
+    calendars: { deleted: 0, errors: [] },
+    events: { deleted: 0, errors: [] },
+    taskLists: { deleted: 0, errors: [] },
+    tasks: { deleted: 0, errors: [] },
+  };
+
+  // Get user with all calendars and task lists
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      calendars: {
+        include: { events: true },
+      },
+      task_lists: {
+        include: { tasks: true },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (!user.google_access_token) {
+    throw new Error('User not authenticated with Google');
+  }
+
+  const calendarClient = GoogleService.getGoogleCalendarClient({
+    access_token: user.google_access_token,
+    refresh_token: user.google_refresh_token,
+    expiry_date: user.google_token_expires_at?.getTime(),
+  });
+
+  const tasksClient = GoogleService.getGoogleTasksClient({
+    access_token: user.google_access_token,
+    refresh_token: user.google_refresh_token,
+    expiry_date: user.google_token_expires_at?.getTime(),
+  });
+
+  // Delete all calendars and their events
+  for (const calendar of user.calendars) {
+    try {
+      // Delete all events from Google Calendar (one-by-one)
+      for (const event of calendar.events) {
+        try {
+          await calendarClient.events.delete({
+            calendarId: calendar.google_calendar_id,
+            eventId: event.google_event_id,
+          });
+          report.events.deleted++;
+        } catch (error) {
+          report.events.errors.push({
+            eventId: event.google_event_id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      // Delete calendar from Google Calendar
+      await calendarClient.calendars.delete({
+        calendarId: calendar.google_calendar_id,
+      });
+
+      // Delete calendar from database (cascades will delete events automatically)
+      await prisma.calendar.delete({
+        where: { google_calendar_id: calendar.google_calendar_id },
+      });
+
+      report.calendars.deleted++;
+    } catch (error) {
+      report.calendars.errors.push({
+        calendarId: calendar.google_calendar_id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // Delete all task lists and their tasks
+  for (const taskList of user.task_lists) {
+    try {
+      // Delete all tasks from Google Tasks (one-by-one)
+      for (const task of taskList.tasks) {
+        try {
+          await tasksClient.tasks.delete({
+            tasklist: taskList.google_task_list_id,
+            task: task.google_task_id,
+          });
+          report.tasks.deleted++;
+        } catch (error) {
+          report.tasks.errors.push({
+            taskId: task.google_task_id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      }
+
+      // Delete task list from Google Tasks
+      await tasksClient.tasklists.delete({
+        tasklist: taskList.google_task_list_id,
+      });
+
+      // Delete task list from database (cascades will delete tasks automatically)
+      await prisma.task_list.delete({
+        where: { google_task_list_id: taskList.google_task_list_id },
+      });
+
+      report.taskLists.deleted++;
+    } catch (error) {
+      report.taskLists.errors.push({
+        taskListId: taskList.google_task_list_id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return report;
+};
+
+export type { ResetReport };
+export { syncFromICS, resetAllData };

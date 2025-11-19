@@ -1,6 +1,13 @@
 import { apiClient } from './client.js';
 import type { ApiSyncReport, SyncPreferences } from '../types/index.js';
 
+export type ResetReport = {
+  calendars: { deleted: number; errors: Array<{ calendarId: string; error: string }> };
+  events: { deleted: number; errors: Array<{ eventId: string; error: string }> };
+  taskLists: { deleted: number; errors: Array<{ taskListId: string; error: string }> };
+  tasks: { deleted: number; errors: Array<{ taskId: string; error: string }> };
+};
+
 /**
  * Typed API endpoint methods
  */
@@ -106,6 +113,15 @@ export const sync = {
    */
   async performSync(): Promise<{ success: boolean; report?: ApiSyncReport; error?: string }> {
     return apiClient.request('/sync', {
+      method: 'POST',
+    });
+  },
+
+  /**
+   * Reset all calendar data (calendars, task lists, events, and tasks)
+   */
+  async reset(): Promise<{ success: boolean; report: ResetReport }> {
+    return apiClient.request('/sync/reset', {
       method: 'POST',
     });
   },

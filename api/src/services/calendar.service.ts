@@ -363,6 +363,60 @@ export const deleteEvent = async (userId: number, googleEventId: string) => {
   return { id: googleEventId };
 };
 
+export const deleteCalendar = async (userId: number, googleCalendarId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { calendars: true },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+  if (!user.google_access_token) {
+    throw new Error('User not authenticated with Google');
+  }
+
+  const calendarRecord = user.calendars.find(c => c.google_calendar_id === googleCalendarId);
+  if (!calendarRecord) {
+    throw new Error('Calendar not found in database');
+  }
+
+  const calendarClient = GoogleService.getGoogleCalendarClient({
+    access_token: user.google_access_token,
+    refresh_token: user.google_refresh_token,
+    expiry_date: user.google_token_expires_at?.getTime(),
+  });
+
+  // Delete all events from Google Calendar (one-by-one)
+  const events = await prisma.calendar_event.findMany({
+    where: { calendar_id: calendarRecord.id },
+  });
+
+  for (const event of events) {
+    try {
+      await calendarClient.events.delete({
+        calendarId: googleCalendarId,
+        eventId: event.google_event_id,
+      });
+    } catch (error) {
+      // Continue even if individual event deletion fails
+      console.error(`Failed to delete event ${event.google_event_id}:`, error);
+    }
+  }
+
+  // Delete calendar from Google Calendar
+  await calendarClient.calendars.delete({
+    calendarId: googleCalendarId,
+  });
+
+  // Delete calendar from database (cascades will delete events automatically)
+  await prisma.calendar.delete({
+    where: { google_calendar_id: googleCalendarId },
+  });
+
+  return { id: googleCalendarId };
+};
+
 // Sync events from parsed ICS data
 export const syncCalendarEvents = async (
   userId: number,

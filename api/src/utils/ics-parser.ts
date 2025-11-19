@@ -50,9 +50,21 @@ export class ICSParser {
   private parseCanvasEvent(vevent: any): CanvasEvent {
     const event = new ICAL.Event(vevent);
     const uid = event.uid;
-    const summary = event.summary || '';
+    const originalSummary = event.summary || '';
     const description = event.description || '';
-    const classification = this.classifyCanvasEvent(uid, summary);
+    const classification = this.classifyCanvasEvent(uid, originalSummary);
+
+    // Remove course code from summary
+    let summary = originalSummary;
+
+    // Pattern 1: Remove course code at the start (e.g., "CSCE 331 - Assignment" -> "Assignment")
+    summary = summary.replace(/^[A-Z]{2,4}[-\s]?\d{3,4}[A-Z]?\s*-\s*/, '');
+
+    // Pattern 2: Remove course code in brackets at the end (e.g., "Assignment [CSCE-331:916,970]" -> "Assignment")
+    summary = summary.replace(/\s*\[[A-Z]{2,4}[-\s]?\d{3,4}[A-Z]?[^\]]*\]\s*$/, '');
+
+    // Clean up any extra whitespace
+    summary = summary.trim();
 
     return {
       uid,

@@ -1,9 +1,9 @@
 import '@src/Options.css';
 // import { t } from '@extension/i18n';
-import { user, withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
+import { user, sync, withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, ErrorDisplay, LoadingSpinner, Toast, ToggleButton } from '@extension/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { SyncPreferences, CanvasEventType } from '@extension/shared';
 
 type TabType = 'user-prefs' | 'extension-options';
@@ -15,14 +15,10 @@ const Options = () => {
   const [icsUrl, setIcsUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastVariant, setToastVariant] = useState<'success' | 'error' | 'info' | 'warning'>('info');
   const [showToast, setShowToast] = useState(false);
-
-  // Load data on mount
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const showToastNotification = (message: string, variant: 'success' | 'error' | 'info' | 'warning') => {
     setToastMessage(message);
@@ -34,7 +30,7 @@ const Options = () => {
     setShowToast(false);
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -60,7 +56,12 @@ const Options = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Load data on mount
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSavePreferences = async () => {
     if (!preferences) return;
@@ -83,6 +84,46 @@ const Options = () => {
       } else {
         setSaving(false);
       }
+    }
+  };
+
+  const handleReset = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to reset all calendar data?\n\n' +
+        'This will permanently delete:\n' +
+        '- All calendars\n' +
+        '- All task lists\n' +
+        '- All events\n' +
+        '- All tasks\n\n' +
+        'This action cannot be undone.',
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setResetting(true);
+
+      const response = await sync.reset();
+      const { report } = response;
+
+      const totalDeleted =
+        report.calendars.deleted + report.events.deleted + report.taskLists.deleted + report.tasks.deleted;
+      const totalErrors =
+        report.calendars.errors.length +
+        report.events.errors.length +
+        report.taskLists.errors.length +
+        report.tasks.errors.length;
+
+      let message = `Reset completed! Deleted ${totalDeleted} items`;
+      if (totalErrors > 0) {
+        message += ` (${totalErrors} errors occurred)`;
+      }
+
+      showToastNotification(message, totalErrors > 0 ? 'warning' : 'success');
+    } catch (err) {
+      showToastNotification(err instanceof Error ? err.message : 'Failed to reset calendar data', 'error');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -410,6 +451,20 @@ const Options = () => {
           <div className="tab-content">
             <h2>Extension Options</h2>
             <p className="subtitle">Customize your extension experience</p>
+
+            <section className="settings-section">
+              <h3>Data Management</h3>
+              <div className="setting-item">
+                <h4 className="setting-label">Reset All Calendar Data</h4>
+                <p className="setting-description">
+                  This will permanently delete all calendars, task lists, events, and tasks from both Google and the
+                  database. This action cannot be undone.
+                </p>
+                <button onClick={handleReset} disabled={resetting} className="btn btn-danger btn-md mt-2">
+                  {resetting ? 'Resetting...' : 'Reset All Data'}
+                </button>
+              </div>
+            </section>
 
             <section className="settings-section">
               <h3>Appearance</h3>

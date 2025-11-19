@@ -74,4 +74,50 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Full calendar reset endpoint - deletes all calendars, task lists, events, and tasks
+router.post('/reset', async (req, res) => {
+  try {
+    const report = await SyncService.resetAllData(req.user!.id);
+
+    return res.json({
+      success: true,
+      report: {
+        calendars: {
+          deleted: report.calendars.deleted,
+          errors: report.calendars.errors,
+        },
+        events: {
+          deleted: report.events.deleted,
+          errors: report.events.errors,
+        },
+        taskLists: {
+          deleted: report.taskLists.deleted,
+          errors: report.taskLists.errors,
+        },
+        tasks: {
+          deleted: report.tasks.deleted,
+          errors: report.tasks.errors,
+        },
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'User not found') {
+        return res.status(404).json({
+          error: error.message,
+        });
+      }
+      if (error.message === 'User not authenticated with Google') {
+        return res.status(401).json({
+          error: error.message,
+          message: 'Please re-authenticate with Google',
+        });
+      }
+      console.error('Error in reset:', error);
+      return res.status(500).json({ error: 'Failed to reset calendar data' });
+    }
+    return res.status(500).json({ error: 'Failed to reset calendar data' });
+  }
+});
+
 export default router;
