@@ -2,7 +2,7 @@ import '@src/Options.css';
 // import { t } from '@extension/i18n';
 import { user, withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
+import { cn, ErrorDisplay, LoadingSpinner, Toast, ToggleButton } from '@extension/ui';
 import { useEffect, useState } from 'react';
 import type { SyncPreferences, CanvasEventType } from '@extension/shared';
 
@@ -15,18 +15,28 @@ const Options = () => {
   const [icsUrl, setIcsUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastVariant, setToastVariant] = useState<'success' | 'error' | 'info' | 'warning'>('info');
+  const [showToast, setShowToast] = useState(false);
 
   // Load data on mount
   useEffect(() => {
     loadData();
   }, []);
 
+  const showToastNotification = (message: string, variant: 'success' | 'error' | 'info' | 'warning') => {
+    setToastMessage(message);
+    setToastVariant(variant);
+    setShowToast(true);
+  };
+
+  const handleToastClose = () => {
+    setShowToast(false);
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
-      setError('');
 
       // Load preferences
       const prefsResponse = await user.getPreferences();
@@ -46,7 +56,7 @@ const Options = () => {
       const icsResponse = await user.getIcsUrl();
       setIcsUrl(icsResponse?.ics_url || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load settings');
+      showToastNotification(err instanceof Error ? err.message : 'Failed to load settings', 'error');
     } finally {
       setLoading(false);
     }
@@ -59,20 +69,19 @@ const Options = () => {
     const startTime = Date.now();
     try {
       setSaving(true);
-      setError('');
-      setSuccessMessage('');
 
       await user.updatePreferences(preferences);
 
-      setSuccessMessage('Preferences saved successfully! Changes will apply on next sync.');
-      setTimeout(() => setSuccessMessage(''), 5000);
+      showToastNotification('Preferences saved successfully! Changes will apply on next sync.', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save preferences');
+      showToastNotification(err instanceof Error ? err.message : 'Failed to save preferences', 'error');
     } finally {
       const endTime = Date.now();
       const duration = endTime - startTime;
       if (duration < MIN_TIME) {
         setTimeout(() => setSaving(false), MIN_TIME - duration);
+      } else {
+        setSaving(false);
       }
     }
   };
@@ -177,18 +186,6 @@ const Options = () => {
 
       {/* Main Content */}
       <main className="options-main">
-        {error && (
-          <div className="alert alert-error">
-            <strong>Error:</strong> {error}
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="alert alert-success">
-            <strong>✓</strong> {successMessage}
-          </div>
-        )}
-
         {/* User Preferences Tab */}
         {activeTab === 'user-prefs' && preferences && (
           <div className="tab-content">
@@ -436,6 +433,9 @@ const Options = () => {
           </div>
         )}
       </main>
+
+      {/* Toast Notification */}
+      <Toast message={toastMessage} variant={toastVariant} isVisible={showToast} onClose={handleToastClose} />
     </div>
   );
 };
