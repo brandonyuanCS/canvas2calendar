@@ -113,28 +113,11 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
   const parser = new ICSParser();
   const parsedICS = await parser.fetchAndParse(feedUrl);
 
-  // 3. Apply global date range filter
-  let allEvents = parsedICS.events;
-
-  if (preferences.data_management?.date_range) {
-    const now = new Date();
-    const { past_days, future_days } = preferences.data_management.date_range;
-
-    const pastCutoff = past_days ? new Date(now.getTime() - past_days * 24 * 60 * 60 * 1000) : null;
-    const futureCutoff = future_days ? new Date(now.getTime() + future_days * 24 * 60 * 60 * 1000) : null;
-
-    allEvents = allEvents.filter(event => {
-      if (pastCutoff && event.dtstart < pastCutoff) return false;
-      if (futureCutoff && event.dtstart > futureCutoff) return false;
-      return true;
-    });
-  }
-
-  // 4. Split and filter events based on preferences
+  // 3. Split and filter events based on preferences
   const calendarEvents: CanvasEvent[] = [];
-  const taskEvents: CanvasEvent[] = [];
+  let taskEvents: CanvasEvent[] = [];
 
-  for (const event of allEvents) {
+  for (const event of parsedICS.events) {
     const eventType = event.eventType; // Always set by ICS parser
     const courseCode = event.courseCode || '';
 
@@ -163,6 +146,21 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
     }
   }
 
+  // Apply task-specific date range filter
+  if (preferences.data_management?.date_range) {
+    const now = new Date();
+    const { past_days, future_days } = preferences.data_management.date_range;
+
+    const pastCutoff = past_days ? new Date(now.getTime() - past_days * 24 * 60 * 60 * 1000) : null;
+    const futureCutoff = future_days ? new Date(now.getTime() + future_days * 24 * 60 * 60 * 1000) : null;
+
+    taskEvents = taskEvents.filter(event => {
+      if (pastCutoff && event.dtstart < pastCutoff) return false;
+      if (futureCutoff && event.dtstart > futureCutoff) return false;
+      return true;
+    });
+  }
+
   // Detect preference changes for both calendar and tasks
   const calendarPrefsChanges = detectCalendarPreferenceChanges(lastSyncedPrefs, preferences);
   const taskPrefsChanges = detectTaskPreferenceChanges(lastSyncedPrefs, preferences);
@@ -170,7 +168,7 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
   // 5 & 6. Sync to respective services in parallel
   const [calendarReport, tasksReport] = await Promise.all([
     CalendarService.syncCalendarEvents(userId, calendarEvents, calendarPrefsChanges),
-    TaskListService.syncTasks(userId, taskEvents, taskPrefsChanges),
+    TaskListService.syncTasks(userId, taskEvents, taskPrefsChanges, preferences),
   ]);
 
   // Update last_synced_preferences after successful sync
@@ -188,7 +186,7 @@ const syncFromICS = async (userId: number, icsUrl?: string): Promise<CentralSync
       total_events_parsed: parsedICS.events.length,
       events_to_calendar: calendarEvents.length,
       events_to_tasks: taskEvents.length,
-      filtered_out: parsedICS.events.length - allEvents.length,
+      filtered_out: parsedICS.events.length - (calendarEvents.length + taskEvents.length),
       sync_started_at: syncStartTime,
       sync_completed_at: new Date(),
     },

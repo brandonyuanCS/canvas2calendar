@@ -2,7 +2,7 @@ import '@src/Options.css';
 // import { t } from '@extension/i18n';
 import { user, sync, withErrorBoundary, withSuspense, useStorage } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, Toast, ToggleButton } from '@extension/ui';
+import { cn, ErrorDisplay, LoadingSpinner, Toast, ToggleButton, RangeSlider } from '@extension/ui';
 import { useEffect, useState, useCallback } from 'react';
 import type { SyncPreferences, CanvasEventType } from '@extension/shared';
 
@@ -395,6 +395,41 @@ const Options = () => {
                   <p className="setting-description">Select which courses to include in Tasks sync</p>
                 </div>
               )}
+
+              <div className="setting-item">
+                <h4 className="setting-label">Task Date Range</h4>
+                <RangeSlider
+                  maxPast={50}
+                  maxFuture={150}
+                  pastDays={preferences.data_management?.date_range?.past_days || 0}
+                  futureDays={preferences.data_management?.date_range?.future_days || 365}
+                  onPastDaysChange={value =>
+                    updatePreference('data_management', {
+                      ...preferences.data_management,
+                      date_range: {
+                        ...preferences.data_management?.date_range,
+                        past_days: value,
+                        future_days: preferences.data_management?.date_range?.future_days || 365,
+                      },
+                    })
+                  }
+                  onFutureDaysChange={value =>
+                    updatePreference('data_management', {
+                      ...preferences.data_management,
+                      date_range: {
+                        ...preferences.data_management?.date_range,
+                        past_days: preferences.data_management?.date_range?.past_days || 0,
+                        future_days: value,
+                      },
+                    })
+                  }
+                />
+                <p className="setting-description">
+                  Keep tasks from {preferences.data_management?.date_range?.past_days || 0} days ago to{' '}
+                  {preferences.data_management?.date_range?.future_days || 365} days in the future. Tasks outside this
+                  range will be deleted.
+                </p>
+              </div>
 
               <div className="setting-item">
                 <label htmlFor="task-organization" className="setting-label">

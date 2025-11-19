@@ -61,8 +61,8 @@ export const DEFAULT_PREFERENCES: SyncPreferences = {
   },
   data_management: {
     date_range: {
-      past_days: 0,
-      future_days: 365,
+      past_days: 5, // Keep tasks up to 5 days overdue
+      future_days: 14, // Sync tasks up to 2 weeks ahead
     },
     auto_archive_completed_tasks: false,
     auto_archive_days: 30,

@@ -1,7 +1,7 @@
 import * as GoogleService from './google.service.js';
 import { prisma } from '../lib/prisma.js';
 import { generateEventHash } from '../utils/hash.util.js';
-import type { CanvasEvent, TaskSyncReport } from '@extension/shared';
+import type { CanvasEvent, TaskSyncReport, SyncPreferences } from '@extension/shared';
 import type { tasks_v1 } from 'googleapis';
 
 // helper functions
@@ -343,6 +343,7 @@ export const syncTasks = async (
   userId: number,
   events: CanvasEvent[],
   prefsChanges?: { removedCourses: string[]; addedCourses: string[] },
+  preferences?: SyncPreferences,
 ): Promise<TaskSyncReport> => {
   const report: TaskSyncReport = {
     taskLists: {
@@ -472,9 +473,54 @@ export const syncTasks = async (
         }
 
         // 4. Load existing tasks for this task list
-        const existingTasks = await prisma.task.findMany({
+        let existingTasks = await prisma.task.findMany({
           where: { task_list_id: taskListRecord.id },
         });
+
+        // 4.5. Delete tasks outside the date range
+        if (preferences?.data_management?.date_range) {
+          const now = new Date();
+          const { past_days, future_days } = preferences.data_management.date_range;
+
+          const pastCutoff = past_days ? new Date(now.getTime() - past_days * 24 * 60 * 60 * 1000) : null;
+          const futureCutoff = future_days ? new Date(now.getTime() + future_days * 24 * 60 * 60 * 1000) : null;
+
+          for (const task of existingTasks) {
+            // Only delete Canvas-synced tasks with due dates
+            if (task.ics_uid.startsWith('event-') && task.due_date) {
+              const shouldDelete =
+                (pastCutoff && task.due_date < pastCutoff) || (futureCutoff && task.due_date > futureCutoff);
+
+              if (shouldDelete) {
+                try {
+                  await deleteTask(userId, googleTaskListId, task.google_task_id);
+                  report.tasks.deleted.push({
+                    ics_uid: task.ics_uid,
+                    title: task.title,
+                    id: task.google_task_id,
+                    taskListTitle: courseCode,
+                  });
+                } catch (error) {
+                  report.errors.push({
+                    ics_uid: task.ics_uid,
+                    courseCode,
+                    error: error instanceof Error ? error.message : 'Failed to delete out-of-range task',
+                  });
+                }
+              }
+            }
+          }
+
+          // Filter out deleted tasks from existingTasks for subsequent processing
+          existingTasks = existingTasks.filter(task => {
+            if (task.ics_uid.startsWith('event-') && task.due_date) {
+              const shouldDelete =
+                (pastCutoff && task.due_date < pastCutoff) || (futureCutoff && task.due_date > futureCutoff);
+              return !shouldDelete;
+            }
+            return true;
+          });
+        }
 
         // 5. Build maps by ics_uid
         const existingTaskMap = new Map(existingTasks.map(t => [t.ics_uid, t]));
