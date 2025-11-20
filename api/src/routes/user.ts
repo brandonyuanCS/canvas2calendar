@@ -64,8 +64,18 @@ router.put('/ics-url', async (req, res) => {
         new Set(parsed.events.map(event => event.courseCode).filter((code): code is string => Boolean(code))),
       ).sort();
     } catch (error) {
+      // Re-throw validation errors (URL validation, fetch errors) - these should prevent saving
+      if (error instanceof Error) {
+        if (
+          error.message.includes('Invalid URL') ||
+          error.message.includes('URL must be') ||
+          error.message.includes('Failed to fetch ICS')
+        ) {
+          throw error;
+        }
+      }
+      // For other parsing errors, log and continue - all_courses will remain unchanged
       console.error('Error parsing ICS feed during URL update:', error);
-      // Continue with URL update even if parsing fails - all_courses will remain unchanged
     }
 
     // Get current user preferences
@@ -111,6 +121,14 @@ router.put('/ics-url', async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating ICS URL:', error);
+    if (error instanceof Error) {
+      // Return validation errors with 400 status, others with 500
+      const isValidationError =
+        error.message.includes('Invalid URL') ||
+        error.message.includes('URL must be') ||
+        error.message.includes('Failed to fetch ICS');
+      return res.status(isValidationError ? 400 : 500).json({ error: error.message });
+    }
     return res.status(500).json({ error: 'Failed to update ICS URL' });
   }
 });

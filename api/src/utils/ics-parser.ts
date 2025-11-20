@@ -4,6 +4,24 @@ import type { CanvasEvent, ParsedICS } from '@extension/shared';
 
 export class ICSParser {
   async fetchICS(url: string): Promise<string> {
+    let parsed: URL;
+
+    try {
+      parsed = new URL(url);
+    } catch (error) {
+      throw new Error(`Invalid URL, ${error}`);
+    }
+    if (parsed.protocol !== 'https:') {
+      throw new Error('URL must be HTTPS');
+    }
+    const canvasDomains = /canvas\.[a-z0-9-]+\.edu$/i;
+    if (!canvasDomains.test(parsed.hostname)) {
+      throw new Error('URL must be Canvas domain URL');
+    }
+    if (!parsed.pathname.startsWith('/feeds/calendars/user_')) {
+      throw new Error('URL must be Canvas calendar URL');
+    }
+
     try {
       const response = await fetch(url, {
         headers: {
