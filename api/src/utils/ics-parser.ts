@@ -3,46 +3,102 @@ import ICAL from 'ical.js';
 import type { CanvasEvent, ParsedICS } from '@extension/shared';
 
 export class ICSParser {
+  private static readonly FETCH_TIMEOUT_MS = 30000; // 30 seconds
+  private static readonly MAX_ICS_SIZE = 10 * 1024 * 1024; // 10MB
+  private static readonly MAX_EVENTS = 10000;
+
   async fetchICS(url: string): Promise<string> {
     let parsed: URL;
 
     try {
       parsed = new URL(url);
-    } catch (error) {
-      throw new Error(`Invalid URL, ${error}`);
+    } catch {
+      throw new Error('Invalid ICS URL format');
     }
     if (parsed.protocol !== 'https:') {
       throw new Error('URL must be HTTPS');
     }
-    const canvasDomains = /canvas\.[a-z0-9-]+\.edu$/i;
+
+    // Strengthened domain validation
+    const canvasDomains = /^canvas\.[a-z0-9-]+\.edu$/i;
     if (!canvasDomains.test(parsed.hostname)) {
       throw new Error('URL must be Canvas domain URL');
     }
+
+    // Additional check: ensure no subdomain tricks
+    const parts = parsed.hostname.split('.');
+    if (parts.length !== 3 || parts[0] !== 'canvas' || !parts[2].endsWith('edu')) {
+      throw new Error('URL must be Canvas domain URL');
+    }
+
     if (!parsed.pathname.startsWith('/feeds/calendars/user_')) {
       throw new Error('URL must be Canvas calendar URL');
     }
 
+    // Explicit path traversal check
+    if (parsed.pathname.includes('../') || parsed.pathname.includes('..\\')) {
+      throw new Error('Invalid path: path traversal detected');
+    }
+
+    const valid_url = `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+
+    // Add timeout using AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ICSParser.FETCH_TIMEOUT_MS);
+
     try {
-      const response = await fetch(url, {
+      const response = await fetch(valid_url, {
+        signal: controller.signal,
         headers: {
           Accept: 'text/calendar,text/plain,*/*',
           'User-Agent': 'canvas2calendar-extension/1.0',
         },
       });
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
+        throw new Error('Failed to fetch ICS feed');
       }
-      return await response.text();
+
+      // Check Content-Length header if available
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength) > ICSParser.MAX_ICS_SIZE) {
+        throw new Error('ICS file too large');
+      }
+
+      const text = await response.text();
+
+      // Verify actual size
+      if (text.length > ICSParser.MAX_ICS_SIZE) {
+        throw new Error('ICS file too large');
+      }
+
+      return text;
     } catch (error) {
-      throw new Error(`Failed to fetch ICS: ${error}`);
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout: ICS feed took too long to respond');
+      }
+      // Don't expose internal error details
+      throw new Error('Failed to fetch ICS feed');
     }
   }
 
   parseICS(icsContent: string): ParsedICS {
+    // Limit input size before parsing
+    if (icsContent.length > ICSParser.MAX_ICS_SIZE) {
+      throw new Error('ICS file exceeds maximum size');
+    }
+
     try {
       const jcalData = ICAL.parse(icsContent);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
+
+      // Limit number of events to prevent DoS
+      if (vevents.length > ICSParser.MAX_EVENTS) {
+        throw new Error(`Too many events in ICS file (max ${ICSParser.MAX_EVENTS})`);
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const events = vevents.map((vevent: any) => this.parseCanvasEvent(vevent));
@@ -53,8 +109,9 @@ export class ICSParser {
         timezone: (comp.getFirstPropertyValue('x-wr-timezone') as string) || undefined,
         lastUpdated: new Date(),
       };
-    } catch (error) {
-      throw new Error(`ICS parsing failed: ${error}`);
+    } catch {
+      // Don't leak internal error details
+      throw new Error('ICS parsing failed: invalid file format');
     }
   }
 
