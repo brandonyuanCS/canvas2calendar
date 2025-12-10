@@ -10,8 +10,6 @@ Currently in plans to be published on the Chrome web store by early 2026. Some f
 - integration with Google Tasks
 - manual refreshing for ICS feed
 
----
-
 ## Notes
 
 - The project uses Express, PostgreSQL, and Prisma for the backend.
