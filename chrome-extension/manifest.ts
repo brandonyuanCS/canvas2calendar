@@ -31,7 +31,7 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   host_permissions: ['<all_urls>'],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity'],
+  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity', 'sidePanel'],
   options_ui: {
     page: 'options/index.html',
     open_in_tab: true,
@@ -41,7 +41,6 @@ const manifest = {
     type: 'module',
   },
   action: {
-    default_popup: 'popup/index.html',
     default_icon: 'icon-34.png',
   },
   icons: {
@@ -67,6 +66,9 @@ const manifest = {
       matches: ['*://*/*'],
     },
   ],
+  side_panel: {
+    default_path: 'side-panel/index.html',
+  },
 } satisfies ManifestType;
 
 export default manifest;
