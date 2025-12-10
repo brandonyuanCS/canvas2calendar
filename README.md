@@ -1,7 +1,7 @@
-# Project Documentation
+# canvas2calendar
 
-This project is in the works and I'm aiming to publish this on the Chrome web store in a couple of months. 
-It's going to allow custom ICS parsing from the Canvas calendar. Some features:
+Web extension to allow custom ICS parsing from Canvas into Google Calendar + Tasks. 
+Currently in plans to be published on the Chrome web store by early 2026. Some features: 
 
 - classification of events (assignments, homework, quizzes, tests, etc.)
 - custom blacklist/whitelist for certain classes/event types
