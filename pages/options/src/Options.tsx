@@ -38,6 +38,22 @@ const Options = () => {
       const prefsResponse = await user.getPreferences();
       const loadedPrefs = prefsResponse.preferences;
 
+      // Fetch Canvas metadata to get course list
+      let courseCodes: string[] = [];
+      try {
+        const metadata = await user.getCanvasMetadata();
+        courseCodes = metadata.courses.map(c => c.code);
+      } catch {
+        // ICS URL might not be set yet, or parsing failed
+        console.warn('Could not fetch Canvas metadata for course list');
+      }
+
+      // Populate all_courses if we got course data
+      if (courseCodes.length > 0) {
+        loadedPrefs.calendar.all_courses = courseCodes;
+        loadedPrefs.tasks.all_courses = courseCodes;
+      }
+
       // Migrate empty included_courses to explicit lists
       if (loadedPrefs.calendar.included_courses.length === 0 && loadedPrefs.calendar.all_courses.length > 0) {
         loadedPrefs.calendar.included_courses = [...loadedPrefs.calendar.all_courses];

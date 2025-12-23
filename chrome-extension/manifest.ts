@@ -32,15 +32,6 @@ const manifest = {
   description: '__MSG_extensionDescription__',
   host_permissions: ['<all_urls>'],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity', 'sidePanel', 'alarms'],
-  oauth2: {
-    client_id: 'YOUR_CHROME_EXTENSION_CLIENT_ID.apps.googleusercontent.com',
-    scopes: [
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/tasks',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-    ],
-  },
   options_ui: {
     page: 'options/index.html',
     open_in_tab: true,

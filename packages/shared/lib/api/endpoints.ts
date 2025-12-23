@@ -113,8 +113,12 @@ const user = {
    * Get user's sync preferences
    */
   async getPreferences(): Promise<{ success: boolean; preferences: SyncPreferences }> {
-    const userData = await sendMessage<{ preferences: SyncPreferences }>({ type: 'GET_USER' });
-    return { success: true, preferences: userData.preferences };
+    const { DEFAULT_PREFERENCES } = await import('../types/preferences.js');
+    const userData = await sendMessage<{ preferences?: SyncPreferences } | null>({ type: 'GET_USER' });
+    return {
+      success: true,
+      preferences: userData?.preferences || DEFAULT_PREFERENCES,
+    };
   },
 
   /**
@@ -131,10 +135,17 @@ const user = {
   },
 
   /**
-   * Get Canvas metadata (Not implemented in background yet)
+   * Get Canvas metadata (courses, event types, etc.)
    */
-  async getCanvasMetadata(): Promise<unknown> {
-    return {}; // Placeholder
+  async getCanvasMetadata(): Promise<{
+    courses: Array<{ code: string; eventCount: number; eventTypes: string[] }>;
+    eventTypes: Record<string, number>;
+    dateRange: { earliest: string; latest: string };
+    totalEvents: number;
+    calendarName?: string;
+    lastFetched: string;
+  }> {
+    return sendMessage({ type: 'GET_CANVAS_METADATA' });
   },
 };
 
