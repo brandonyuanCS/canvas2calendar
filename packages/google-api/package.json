@@ -1,7 +1,7 @@
 {
-  "name": "@extension/storage",
+  "name": "@extension/google-api",
   "version": "0.5.0",
-  "description": "chrome extension - storage",
+  "description": "Lightweight Google API client for Chrome Extensions",
   "type": "module",
   "private": true,
   "sideEffects": false,
@@ -20,9 +20,6 @@
     "lint:fix": "pnpm lint --fix",
     "format": "prettier . --write --ignore-path ../../.prettierignore",
     "type-check": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@extension/shared": "workspace:*"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*"

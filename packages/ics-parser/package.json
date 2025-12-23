@@ -1,7 +1,7 @@
 {
-  "name": "@extension/storage",
+  "name": "@extension/ics-parser",
   "version": "0.5.0",
-  "description": "chrome extension - storage",
+  "description": "ICS calendar parser for Canvas feeds",
   "type": "module",
   "private": true,
   "sideEffects": false,
@@ -22,7 +22,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@extension/shared": "workspace:*"
+    "@extension/shared": "workspace:*",
+    "ical.js": "^2.1.0"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*"

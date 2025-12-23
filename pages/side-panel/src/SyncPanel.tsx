@@ -44,13 +44,30 @@ export default function SyncPanel() {
   };
 
   useEffect(() => {
-    chrome.storage.local.get(['token', 'userEmail', 'debugLogs'], result => {
-      if (result.token) {
-        setUserEmail(result.userEmail || '');
-        setIsAuthenticated(true);
-        checkSetupStatus();
-      }
+    const init = async () => {
+      try {
+        // Check if we have a user session by fetching preferences/user info
+        const result = await user.getPreferences();
+        if (result.success && result.preferences) {
+          // We are authenticated
+          setIsAuthenticated(true);
 
+          // Try to get email for display
+          chrome.storage.local.get(['userEmail'], local => {
+            if (local.userEmail) setUserEmail(local.userEmail);
+          });
+
+          checkSetupStatus();
+        }
+      } catch {
+        // Not authenticated
+        setIsAuthenticated(false);
+      }
+    };
+
+    init();
+
+    chrome.storage.local.get(['debugLogs'], result => {
       if (result.debugLogs) {
         setDebugLogs(result.debugLogs as DebugLog[]);
       }
@@ -78,107 +95,37 @@ export default function SyncPanel() {
       setError('');
       addDebugLog('info', 'Starting OAuth flow...');
 
-      addDebugLog('info', 'Fetching auth URL from backend...');
-      const { authUrl } = await auth.getGoogleAuthUrl();
-      addDebugLog('success', `Auth URL received`);
+      const userInfo = await auth.signIn();
+      addDebugLog('success', `Logged in as: ${userInfo.email}`);
 
-      addDebugLog('info', 'Opening OAuth window...');
-      chrome.windows.create(
-        {
-          url: authUrl,
-          type: 'popup',
-          width: 500,
-          height: 600,
-        },
-        oauthWindow => {
-          if (!oauthWindow || !oauthWindow.id) {
-            addDebugLog('error', 'Failed to create OAuth window');
-            setError('Failed to open OAuth window');
-            setLoading(false);
-            return;
-          }
+      setUserEmail(userInfo.email);
+      setIsAuthenticated(true);
 
-          const windowId = oauthWindow.id;
-          addDebugLog('info', `OAuth window opened: ${windowId}`);
+      chrome.storage.local.set({ userEmail: userInfo.email });
 
-          const pollInterval = setInterval(() => {
-            chrome.windows.get(windowId, { populate: true }, win => {
-              if (chrome.runtime.lastError || !win) {
-                clearInterval(pollInterval);
-                addDebugLog('info', 'OAuth window closed by user');
-                setLoading(false);
-                return;
-              }
-
-              const tabs = win.tabs || [];
-              for (const tab of tabs) {
-                if (!tab.url) continue;
-
-                if (tab.url.includes('/auth/callback')) {
-                  addDebugLog('success', 'Callback URL detected!');
-                  clearInterval(pollInterval);
-
-                  try {
-                    const url = new URL(tab.url);
-                    const hash = url.hash || '';
-                    const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-                    const jwt = params.get('jwt');
-                    const emailFromHash = params.get('email');
-
-                    if (jwt) {
-                      addDebugLog('success', 'JWT token found in URL fragment!');
-                      chrome.storage.local.set({ token: jwt, userEmail: emailFromHash || '' }, () => {
-                        addDebugLog('success', `Logged in as: ${emailFromHash || ''}`);
-                        setUserEmail(emailFromHash || '');
-                        setIsAuthenticated(true);
-                        setLoading(false);
-                        checkSetupStatus();
-                        chrome.windows.remove(windowId);
-                        addDebugLog('info', '✓ OAuth complete!');
-                      });
-                      break;
-                    }
-
-                    const error = url.searchParams.get('error');
-                    if (error) {
-                      addDebugLog('error', `OAuth error: ${error}`);
-                      setError(`OAuth error: ${error}`);
-                      setLoading(false);
-                      chrome.windows.remove(windowId);
-                      break;
-                    }
-
-                    addDebugLog('info', 'Waiting for JWT fragment to be set...');
-                  } catch {
-                    addDebugLog('error', 'Failed to parse callback URL');
-                    setError('Failed to parse OAuth callback');
-                    setLoading(false);
-                    chrome.windows.remove(windowId);
-                    break;
-                  }
-                }
-              }
-            });
-          }, 500);
-        },
-      );
+      checkSetupStatus();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start OAuth';
       addDebugLog('error', `OAuth failed: ${errorMessage}`);
       setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    chrome.storage.local.remove(['token', 'userEmail'], () => {
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      chrome.storage.local.remove(['userEmail']);
       setUserEmail('');
       setIsAuthenticated(false);
       setHasCalendar(false);
       setIcsUrl('');
       setIcsUrlInput('');
       setSyncReport(null);
-    });
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
   };
 
   const handleCreateCalendar = async () => {

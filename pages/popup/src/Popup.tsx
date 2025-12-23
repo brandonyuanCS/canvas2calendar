@@ -47,14 +47,32 @@ export default function Popup() {
 
   // Load auth state and debug logs from chrome.storage on mount
   useEffect(() => {
-    chrome.storage.local.get(['token', 'userEmail', 'debugLogs'], result => {
-      if (result.token) {
-        setUserEmail(result.userEmail || '');
-        setIsAuthenticated(true);
-        checkSetupStatus();
-      }
+    const init = async () => {
+      try {
+        // Check if we have a user session by fetching preferences/user info
+        const result = await user.getPreferences();
+        if (result.success && result.preferences) {
+          // We are authenticated
+          setIsAuthenticated(true);
 
-      // Load debug logs
+          // Try to get email for display (we might need a new endpoint for this, or extract from user data if we had it)
+          // For now, let's try to get it from storage if we cached it, or just generic "Signed In"
+          chrome.storage.local.get(['userEmail'], local => {
+            if (local.userEmail) setUserEmail(local.userEmail);
+          });
+
+          checkSetupStatus();
+        }
+      } catch {
+        // Not authenticated or error
+        setIsAuthenticated(false);
+      }
+    };
+
+    init();
+
+    // Load debug logs
+    chrome.storage.local.get(['debugLogs'], result => {
       if (result.debugLogs) {
         setDebugLogs(result.debugLogs as DebugLog[]);
       }
@@ -64,7 +82,7 @@ export default function Popup() {
   // Check if calendar exists and ICS URL is set
   const checkSetupStatus = async () => {
     try {
-      // Check calendar
+      // Check for calendar
       const hasCalendarResult = await calendar.checkExists();
       setHasCalendar(hasCalendarResult);
 
@@ -79,125 +97,45 @@ export default function Popup() {
     }
   };
 
-  // OAuth flow - simple tab polling approach
+  // OAuth flow - using new Chrome Identity API
   const handleLogin = async () => {
     try {
       setLoading(true);
       setError('');
       addDebugLog('info', 'Starting OAuth flow...');
 
-      // Get auth URL
-      addDebugLog('info', 'Fetching auth URL from backend...');
-      const { authUrl } = await auth.getGoogleAuthUrl();
-      addDebugLog('success', `Auth URL received`);
+      const userInfo = await auth.signIn();
+      addDebugLog('success', `Logged in as: ${userInfo.email}`);
 
-      // Open OAuth in new window
-      addDebugLog('info', 'Opening OAuth window...');
-      chrome.windows.create(
-        {
-          url: authUrl,
-          type: 'popup',
-          width: 500,
-          height: 600,
-        },
-        oauthWindow => {
-          if (!oauthWindow || !oauthWindow.id) {
-            addDebugLog('error', 'Failed to create OAuth window');
-            setError('Failed to open OAuth window');
-            setLoading(false);
-            return;
-          }
+      setUserEmail(userInfo.email);
+      setIsAuthenticated(true);
 
-          const windowId = oauthWindow.id;
-          addDebugLog('info', `OAuth window opened: ${windowId}`);
+      // Persist email for UI display next time
+      chrome.storage.local.set({ userEmail: userInfo.email });
 
-          // Poll the window's tabs for the callback URL
-          const pollInterval = setInterval(() => {
-            chrome.windows.get(windowId, { populate: true }, win => {
-              // Check if window was closed by user
-              if (chrome.runtime.lastError || !win) {
-                clearInterval(pollInterval);
-                addDebugLog('info', 'OAuth window closed by user');
-                setLoading(false);
-                return;
-              }
-
-              // Check all tabs in the window for callback URL
-              const tabs = win.tabs || [];
-              for (const tab of tabs) {
-                if (!tab.url) continue;
-
-                // Check if this is the callback URL
-                if (tab.url.includes('/auth/callback')) {
-                  addDebugLog('success', 'Callback URL detected!');
-                  clearInterval(pollInterval);
-
-                  try {
-                    const url = new URL(tab.url);
-
-                    // First try to read token from the URL fragment (set by success HTML)
-                    const hash = url.hash || '';
-                    const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-                    const jwt = params.get('jwt');
-                    const emailFromHash = params.get('email');
-
-                    if (jwt) {
-                      addDebugLog('success', 'JWT token found in URL fragment!');
-                      chrome.storage.local.set({ token: jwt, userEmail: emailFromHash || '' }, () => {
-                        addDebugLog('success', `Logged in as: ${emailFromHash || ''}`);
-                        setUserEmail(emailFromHash || '');
-                        setIsAuthenticated(true);
-                        setLoading(false);
-                        checkSetupStatus();
-                        chrome.windows.remove(windowId);
-                        addDebugLog('info', '✓ OAuth complete!');
-                      });
-                      break;
-                    }
-
-                    // Check for OAuth error
-                    const error = url.searchParams.get('error');
-                    if (error) {
-                      addDebugLog('error', `OAuth error: ${error}`);
-                      setError(`OAuth error: ${error}`);
-                      setLoading(false);
-                      chrome.windows.remove(windowId);
-                      break;
-                    }
-
-                    // If no fragment yet, wait for it (the script is setting it)
-                    addDebugLog('info', 'Waiting for JWT fragment to be set...');
-                    // Don't break here - keep polling until fragment appears
-                  } catch {
-                    addDebugLog('error', 'Failed to parse callback URL');
-                    setError('Failed to parse OAuth callback');
-                    setLoading(false);
-                    chrome.windows.remove(windowId);
-                    break;
-                  }
-                }
-              }
-            });
-          }, 500); // Poll every 500ms
-        },
-      );
+      checkSetupStatus();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start OAuth';
       addDebugLog('error', `OAuth failed: ${errorMessage}`);
       setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    chrome.storage.local.remove(['token', 'userEmail'], () => {
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      chrome.storage.local.remove(['userEmail']);
       setUserEmail('');
       setIsAuthenticated(false);
       setHasCalendar(false);
       setIcsUrl('');
       setIcsUrlInput('');
       setSyncReport(null);
-    });
+    } catch (err) {
+      console.error('Logout failed:', err);
+    }
   };
 
   // Calendar setup

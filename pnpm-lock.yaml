@@ -223,6 +223,12 @@ importers:
       '@extension/env':
         specifier: workspace:*
         version: link:../packages/env
+      '@extension/google-api':
+        specifier: workspace:*
+        version: link:../packages/google-api
+      '@extension/ics-parser':
+        specifier: workspace:*
+        version: link:../packages/ics-parser
       '@extension/shared':
         specifier: workspace:*
         version: link:../packages/shared
@@ -274,6 +280,12 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  packages/google-api:
+    devDependencies:
+      '@extension/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+
   packages/hmr:
     devDependencies:
       '@extension/env':
@@ -314,6 +326,19 @@ importers:
         specifier: workspace:*
         version: link:../tsconfig
 
+  packages/ics-parser:
+    dependencies:
+      '@extension/shared':
+        specifier: workspace:*
+        version: link:../shared
+      ical.js:
+        specifier: ^2.1.0
+        version: 2.2.1
+    devDependencies:
+      '@extension/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+
   packages/module-manager:
     devDependencies:
       '@extension/dev-utils':
@@ -344,9 +369,6 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(react@19.2.0)
     devDependencies:
-      '@extension/storage':
-        specifier: workspace:*
-        version: link:../storage
       '@extension/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
@@ -355,6 +377,10 @@ importers:
         version: 4.41.0
 
   packages/storage:
+    dependencies:
+      '@extension/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@extension/tsconfig':
         specifier: workspace:*
@@ -426,6 +452,28 @@ importers:
       '@extension/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+
+  pages/content:
+    dependencies:
+      '@extension/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@extension/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@extension/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+    devDependencies:
+      '@extension/hmr':
+        specifier: workspace:*
+        version: link:../../packages/hmr
+      '@extension/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@extension/vite-config':
+        specifier: workspace:*
+        version: link:../../packages/vite-config
 
   pages/content-ui:
     dependencies:
@@ -3854,6 +3902,9 @@ packages:
 
   ical.js@1.5.0:
     resolution: {integrity: sha512-7ZxMkogUkkaCx810yp0ZGKvq1ZpRgJeornPttpoxe6nYZ3NLesZe1wWMXDdwTkj/b5NtXT+Y16Aakph/ao98ZQ==}
+
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
 
   iconv-lite@0.4.24:
     resolution: {integrity: sha512-v3MXnZAcvnywkTUEZomIActle7RXXeedOR31wwl7VlyoXO4Qi9arvSenNQWne1TcRwhCL1HwLI21bEqdpj8/rA==}
@@ -9808,6 +9859,8 @@ snapshots:
   husky@9.1.7: {}
 
   ical.js@1.5.0: {}
+
+  ical.js@2.2.1: {}
 
   iconv-lite@0.4.24:
     dependencies:
