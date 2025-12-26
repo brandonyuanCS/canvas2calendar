@@ -6,68 +6,65 @@
 
 import type { GoogleUserInfo, GoogleApiError } from './types.js';
 
-/**
- * Chrome reference - may be undefined during build/test
- */
 const chrome = globalThis.chrome;
-
-/**
- * OAuth Configuration
- * Client ID from environment variables (set in .env)
- */
 const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'] || '';
-
 const OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/tasks',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
+  'openid', // Required for id_token
 ];
-
-/**
- * Token storage key
- */
 const TOKEN_STORAGE_KEY = 'google_access_token';
 const TOKEN_EXPIRY_KEY = 'google_token_expiry';
+const ID_TOKEN_STORAGE_KEY = 'google_id_token';
+const NONCE_STORAGE_KEY = 'google_oauth_nonce';
 
-/**
- * Get the redirect URL for this extension
- * Format: https://<extension-id>.chromiumapp.org/
- */
 const getRedirectUrl = (): string => chrome.identity.getRedirectURL();
 
 /**
- * Build the OAuth authorization URL
+ * Store nonce for later verification with Supabase
  */
-const buildAuthUrl = (): string => {
+const storeNonce = async (nonce: string): Promise<void> =>
+  new Promise(resolve => {
+    chrome.storage.local.set({ [NONCE_STORAGE_KEY]: nonce }, resolve);
+  });
+
+const buildAuthUrl = async (): Promise<string> => {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error('GOOGLE_CLIENT_ID environment variable is not set');
   }
 
   const redirectUrl = getRedirectUrl();
+  // Generate and store nonce for Supabase verification
+  const nonce = crypto.randomUUID();
+  await storeNonce(nonce);
+
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUrl,
-    response_type: 'token', // Implicit grant - returns token directly
+    response_type: 'token id_token', // Request both access token and ID token
     scope: OAUTH_SCOPES.join(' '),
     prompt: 'consent', // Always show consent screen for clarity
+    nonce: nonce, // Required for id_token - stored for Supabase verification
   });
 
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 };
 
 /**
- * Extract access token from redirect URL
+ * Extract access token and ID token from redirect URL
  */
-const extractTokenFromUrl = (url: string): { token: string; expiresIn: number } | null => {
+const extractTokenFromUrl = (url: string): { token: string; idToken: string | null; expiresIn: number } | null => {
   try {
     const hashParams = new URL(url).hash.substring(1);
     const params = new URLSearchParams(hashParams);
     const token = params.get('access_token');
+    const idToken = params.get('id_token');
     const expiresIn = parseInt(params.get('expires_in') || '3600', 10);
 
     if (token) {
-      return { token, expiresIn };
+      return { token, idToken, expiresIn };
     }
   } catch {
     // URL parsing failed
@@ -93,29 +90,35 @@ const getStoredToken = async (): Promise<string | null> =>
   });
 
 /**
- * Store token with expiry
+ * Store token with expiry (and optionally ID token)
  */
-const storeToken = async (token: string, expiresIn: number): Promise<void> => {
+const storeToken = async (token: string, expiresIn: number, idToken?: string | null): Promise<void> => {
   // Store with 5 minute buffer before expiry
   const expiry = Date.now() + (expiresIn - 300) * 1000;
 
+  const data: Record<string, unknown> = {
+    [TOKEN_STORAGE_KEY]: token,
+    [TOKEN_EXPIRY_KEY]: expiry,
+  };
+
+  if (idToken) {
+    data[ID_TOKEN_STORAGE_KEY] = idToken;
+  }
+
   return new Promise(resolve => {
-    chrome.storage.local.set(
-      {
-        [TOKEN_STORAGE_KEY]: token,
-        [TOKEN_EXPIRY_KEY]: expiry,
-      },
-      resolve,
-    );
+    chrome.storage.local.set(data, resolve);
   });
 };
 
 /**
- * Clear stored token
+ * Clear stored token (including ID token and nonce)
  */
 const clearStoredToken = async (): Promise<void> =>
   new Promise(resolve => {
-    chrome.storage.local.remove([TOKEN_STORAGE_KEY, TOKEN_EXPIRY_KEY], resolve);
+    chrome.storage.local.remove(
+      [TOKEN_STORAGE_KEY, TOKEN_EXPIRY_KEY, ID_TOKEN_STORAGE_KEY, NONCE_STORAGE_KEY],
+      resolve,
+    );
   });
 
 /**
@@ -139,7 +142,7 @@ export const getAuthToken = async (interactive = true): Promise<string> => {
   }
 
   // Launch OAuth flow
-  const authUrl = buildAuthUrl();
+  const authUrl = await buildAuthUrl();
 
   return new Promise((resolve, reject) => {
     chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async responseUrl => {
@@ -159,8 +162,8 @@ export const getAuthToken = async (interactive = true): Promise<string> => {
         return;
       }
 
-      // Store token for future use
-      await storeToken(tokenData.token, tokenData.expiresIn);
+      // Store token for future use (including ID token for Supabase)
+      await storeToken(tokenData.token, tokenData.expiresIn, tokenData.idToken);
 
       resolve(tokenData.token);
     });
@@ -262,6 +265,26 @@ export class GoogleApiException extends Error {
     return this.status === 410;
   }
 }
+
+/**
+ * Get stored nonce (for Supabase auth)
+ */
+export const getStoredNonce = async (): Promise<string | null> =>
+  new Promise(resolve => {
+    chrome.storage.local.get([NONCE_STORAGE_KEY], result => {
+      resolve(result[NONCE_STORAGE_KEY] || null);
+    });
+  });
+
+/**
+ * Get stored ID token (for Supabase auth)
+ */
+export const getStoredIdToken = async (): Promise<string | null> =>
+  new Promise(resolve => {
+    chrome.storage.local.get([ID_TOKEN_STORAGE_KEY], result => {
+      resolve(result[ID_TOKEN_STORAGE_KEY] || null);
+    });
+  });
 
 /**
  * Get the redirect URL for debugging/setup purposes

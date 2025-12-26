@@ -1,3 +1,10 @@
+/**
+ * Canvas Event Types
+ * Cross-cutting concern types for Canvas ICS data
+ * Used by: ics-parser, storage, background sync, UI components
+ * These types represent the parsed Canvas calendar data structure
+ */
+
 // Canvas event and ICS parsing types (shared)
 
 export interface CanvasEvent {

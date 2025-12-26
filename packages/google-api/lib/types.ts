@@ -1,6 +1,9 @@
 /**
- * Google API Types
+ * Google API Types (Domain-Specific)
  * Type definitions for Google Calendar and Tasks API responses
+ *
+ * Ownership: @extension/google-api package
+ * These types are specific to Google API interactions and should not be moved to shared
  */
 
 // ============= Calendar API Types =============

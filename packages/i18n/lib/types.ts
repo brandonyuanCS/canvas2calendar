@@ -1,3 +1,10 @@
+/**
+ * i18n Types (Domain-Specific)
+ * Type definitions for internationalization functionality
+ *
+ * Ownership: @extension/i18n package
+ */
+
 import enMessage from '../locales/en/messages.json' with { type: 'json' };
 import type { SUPPORTED_LANGUAGES } from './consts.js';
 

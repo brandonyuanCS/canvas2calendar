@@ -1,3 +1,10 @@
+/**
+ * Module Manager Types (Domain-Specific)
+ * Type definitions for module management CLI functionality
+ *
+ * Ownership: @extension/module-manager package
+ */
+
 import type { DEFAULT_CHOICES, MODULE_CONFIG } from './const.js';
 import type { WritableDeep } from '@extension/shared';
 import type { select } from '@inquirer/prompts';

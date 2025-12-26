@@ -17,6 +17,8 @@ import {
   TasksAPI,
   clearAllCachedTokens,
   GoogleApiException,
+  getStoredIdToken,
+  getStoredNonce,
 } from '@extension/google-api';
 import { icsParser, validateCanvasUrl } from '@extension/ics-parser';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
@@ -29,6 +31,12 @@ import {
   tasksStorage,
   clearAllCanvas2CalData,
 } from '@extension/storage';
+import {
+  signInWithGoogleToken,
+  signOut as supabaseSignOut,
+  getSubscriptionTier,
+  isSupabaseConfigured,
+} from '@extension/supabase';
 import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport } from '@extension/shared';
 import type { CalendarDataState } from '@extension/storage';
 
@@ -100,6 +108,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
   switch (message.type) {
     case 'SIGN_IN': {
       try {
+        // Step 1: Google OAuth
         await getAuthToken(true);
         const userInfo = await getUserInfo();
 
@@ -107,6 +116,56 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
         // Get existing user data to merge (preserves ICS URL, preferences, etc.)
         const existingUser = await userStorage.get();
+
+        // Step 2: Supabase auth (if configured)
+        let subscriptionTier: 'free' | 'pro' | 'max' = existingUser?.subscription_tier || 'free';
+        let subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'trialing' =
+          existingUser?.subscription_status || 'active';
+        let supabaseUserId = existingUser?.supabase_user_id;
+
+        console.log('[Canvas2Calendar] Checking Supabase config...');
+        const supabaseIsConfigured = isSupabaseConfigured();
+        console.log('[Canvas2Calendar] isSupabaseConfigured():', supabaseIsConfigured);
+
+        if (supabaseIsConfigured) {
+          console.log('[Canvas2Calendar] Supabase is configured, checking for ID token...');
+          const idToken = await getStoredIdToken();
+          const nonce = await getStoredNonce();
+          console.log(
+            '[Canvas2Calendar] ID token present:',
+            !!idToken,
+            idToken ? `(${idToken.substring(0, 20)}...)` : '',
+          );
+          console.log('[Canvas2Calendar] Nonce present:', !!nonce);
+          if (idToken) {
+            try {
+              const supabaseResult = await signInWithGoogleToken(
+                idToken,
+                {
+                  id: userInfo.id,
+                  email: userInfo.email,
+                  name: userInfo.name,
+                  picture: userInfo.picture,
+                },
+                nonce,
+              );
+
+              if (supabaseResult.success && supabaseResult.user) {
+                supabaseUserId = supabaseResult.user.id;
+                subscriptionTier = supabaseResult.user.subscription_tier;
+                subscriptionStatus = supabaseResult.user.subscription_status;
+                console.log('[Canvas2Calendar] Supabase auth successful, tier:', subscriptionTier);
+              } else {
+                console.warn('[Canvas2Calendar] Supabase auth failed:', supabaseResult.error);
+              }
+            } catch (supabaseError) {
+              console.error('[Canvas2Calendar] Supabase auth error:', supabaseError);
+              // Continue without Supabase - graceful degradation
+            }
+          } else {
+            console.warn('[Canvas2Calendar] No ID token available for Supabase auth');
+          }
+        }
 
         await userStorage.set({
           // Preserve existing data
@@ -116,13 +175,24 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           email: userInfo.email,
           name: userInfo.name,
           picture: userInfo.picture,
+          // Supabase integration
+          supabase_user_id: supabaseUserId,
+          subscription_tier: subscriptionTier,
+          subscription_status: subscriptionStatus,
           // Only set defaults if not already set
           preferences: existingUser?.preferences || DEFAULT_PREFERENCES,
           created_at: existingUser?.created_at || now,
           updated_at: now,
         });
 
-        return { success: true, data: { email: userInfo.email, name: userInfo.name } };
+        return {
+          success: true,
+          data: {
+            email: userInfo.email,
+            name: userInfo.name,
+            subscription_tier: subscriptionTier,
+          },
+        };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : 'Sign in failed' };
       }
@@ -134,17 +204,62 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
       await clearAllCachedTokens();
       await chrome.alarms.clear(ALARM_NAME);
 
+      // Sign out from Supabase too
+      if (isSupabaseConfigured()) {
+        try {
+          await supabaseSignOut();
+        } catch {
+          // Ignore Supabase sign out errors
+        }
+      }
+
       // Clear the google_user_id but preserve other user data (ICS URL, preferences)
       const existingUser = await userStorage.get();
       if (existingUser) {
         await userStorage.set({
           ...existingUser,
           google_user_id: '', // Mark as not authenticated
+          supabase_user_id: undefined,
           updated_at: new Date().toISOString(),
         });
       }
 
       return { success: true, data: null };
+    }
+
+    case 'GET_SUBSCRIPTION': {
+      try {
+        const user = await userStorage.get();
+        if (!user?.google_user_id) {
+          return { success: false, error: 'Not authenticated' };
+        }
+
+        // Try to refresh from Supabase if configured
+        if (isSupabaseConfigured() && user.google_user_id) {
+          try {
+            const tier = await getSubscriptionTier(user.google_user_id);
+            return {
+              success: true,
+              data: {
+                tier,
+                status: user.subscription_status,
+              },
+            };
+          } catch {
+            // Fall back to cached value
+          }
+        }
+
+        return {
+          success: true,
+          data: {
+            tier: user.subscription_tier || 'free',
+            status: user.subscription_status || 'active',
+          },
+        };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to get subscription' };
+      }
     }
 
     case 'SYNC_NOW': {
@@ -984,6 +1099,7 @@ export type BackgroundMessage =
   | { type: 'SYNC_NOW'; icsUrl?: string }
   | { type: 'GET_STATUS' }
   | { type: 'GET_USER' }
+  | { type: 'GET_SUBSCRIPTION' }
   | { type: 'SET_ICS_URL'; url: string }
   | { type: 'UPDATE_PREFERENCES'; preferences: Partial<SyncPreferences> }
   | { type: 'CREATE_CALENDAR'; name: string; description?: string }

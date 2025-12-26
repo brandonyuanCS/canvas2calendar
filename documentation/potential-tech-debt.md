@@ -4,6 +4,8 @@
 
 This document tracks known technical debt, incomplete features, and potential improvements identified during the migration from a centralized server architecture to a local-first Chrome Extension model.
 
+One important thing to consider: if we get (A LOT) of active users, the first rate limit we will hit is w/ the google tasks API
+
 ---
 
 ## 🔴 High Priority

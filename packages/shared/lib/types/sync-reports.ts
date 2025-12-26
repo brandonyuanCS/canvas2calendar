@@ -1,3 +1,10 @@
+/**
+ * Sync Report Types
+ * Cross-cutting concern types for sync operation results
+ * Used by: background sync, API endpoints, UI components
+ * These types represent the results and status of sync operations
+ */
+
 export interface SyncReport {
   created: Array<{ ics_uid: string; title: string; id: string }>;
   updated: Array<{ ics_uid: string; title: string; id: string }>;

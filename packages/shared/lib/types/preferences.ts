@@ -1,3 +1,10 @@
+/**
+ * User Preferences Types
+ * Cross-cutting concern types for user sync preferences
+ * Used by: UI components, storage, background sync, API
+ * These types define the user's sync configuration and settings
+ */
+
 export type CanvasEventType = 'assignment' | 'event';
 export type TaskListNaming = 'code' | 'name' | 'combined';
 export type TaskOrganization = 'per_course' | 'consolidated';

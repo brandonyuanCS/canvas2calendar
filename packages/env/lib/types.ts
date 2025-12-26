@@ -1,3 +1,10 @@
+/**
+ * Environment Types (Domain-Specific)
+ * Type definitions for environment variables and configuration
+ *
+ * Ownership: @extension/env package
+ */
+
 import type { dynamicEnvValues } from './index.js';
 
 interface ICebEnv {

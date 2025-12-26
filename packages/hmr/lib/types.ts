@@ -1,3 +1,10 @@
+/**
+ * HMR Types (Domain-Specific)
+ * Type definitions for Hot Module Replacement functionality
+ *
+ * Ownership: @extension/hmr package
+ */
+
 import type { BUILD_COMPLETE, DO_UPDATE, DONE_UPDATE } from './consts.js';
 
 type UpdateRequestMessageType = {

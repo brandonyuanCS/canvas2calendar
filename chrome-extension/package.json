@@ -24,6 +24,7 @@
     "@extension/ics-parser": "workspace:*",
     "@extension/shared": "workspace:*",
     "@extension/storage": "workspace:*",
+    "@extension/supabase": "workspace:*",
     "webextension-polyfill": "^0.12.0"
   },
   "devDependencies": {

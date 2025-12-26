@@ -1,6 +1,9 @@
 /**
- * Canvas2Calendar Storage Types
+ * Canvas2Calendar Storage Types (Domain-Specific)
  * Data structures for persisting sync state in chrome.storage.local
+ *
+ * Ownership: @extension/storage package
+ * These types are specific to the storage implementation and should not be moved to shared
  */
 
 import type { SyncPreferences } from '@extension/shared';
@@ -12,6 +15,11 @@ export interface UserDataState {
   email: string;
   name?: string;
   picture?: string;
+  // Supabase integration
+  supabase_user_id?: string;
+  subscription_tier: 'free' | 'pro' | 'max';
+  subscription_status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  // Canvas data
   canvas_ics_feed_url?: string;
   preferences: SyncPreferences;
   last_synced_preferences?: SyncPreferences;
