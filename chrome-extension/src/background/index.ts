@@ -139,16 +139,12 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           console.log('[Canvas2Calendar] Nonce present:', !!nonce);
           if (idToken) {
             try {
-              const supabaseResult = await signInWithGoogleToken(
-                idToken,
-                {
-                  id: userInfo.id,
-                  email: userInfo.email,
-                  name: userInfo.name,
-                  picture: userInfo.picture,
-                },
-                nonce,
-              );
+              const supabaseResult = await signInWithGoogleToken(idToken, {
+                id: userInfo.id,
+                email: userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.picture,
+              });
 
               if (supabaseResult.success && supabaseResult.user) {
                 supabaseUserId = supabaseResult.user.id;
@@ -502,6 +498,12 @@ const runSync = async (
     const preferences = user.preferences || DEFAULT_PREFERENCES;
     const totalEventsParsed = parsedICS.events.length;
 
+    // Calculate date range cutoffs for pre-filtering
+    const now = new Date();
+    const dateRange = preferences.data_management?.date_range;
+    const pastCutoff = dateRange ? new Date(now.getTime() - dateRange.past_days * 24 * 60 * 60 * 1000) : null;
+    const futureCutoff = dateRange ? new Date(now.getTime() + dateRange.future_days * 24 * 60 * 60 * 1000) : null;
+
     // Filter events
     const calendarEvents: CanvasEvent[] = [];
     const taskEvents: CanvasEvent[] = [];
@@ -518,12 +520,17 @@ const runSync = async (
         }
       }
 
-      // Tasks filtering: event type must match, and course must be included (empty = all)
+      // Tasks filtering: event type must match, course must be included, AND within date range
       if (preferences.tasks.event_types.includes(event.eventType)) {
         const includedCourses = preferences.tasks.included_courses;
         // If includedCourses is empty, include all; otherwise check if course is in list
         if (includedCourses.length === 0 || !courseCode || includedCourses.includes(courseCode)) {
-          taskEvents.push(event);
+          // Pre-filter by date range to avoid creating tasks that would immediately be deleted
+          const eventDate = event.dtstart;
+          const inDateRange = (!pastCutoff || eventDate >= pastCutoff) && (!futureCutoff || eventDate <= futureCutoff);
+          if (inDateRange) {
+            taskEvents.push(event);
+          }
         }
       }
     }
