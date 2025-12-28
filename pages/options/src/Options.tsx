@@ -12,6 +12,7 @@ const Options = () => {
   const { isLight } = useStorage(exampleThemeStorage);
   const [activeTab, setActiveTab] = useState<TabType>('user-prefs');
   const [preferences, setPreferences] = useState<SyncPreferences | null>(null);
+  const [allCourses, setAllCourses] = useState<string[]>([]); // Local UI state, not stored in preferences
   const [icsUrl, setIcsUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -48,18 +49,15 @@ const Options = () => {
         console.warn('Could not fetch Canvas metadata for course list');
       }
 
-      // Populate all_courses if we got course data
-      if (courseCodes.length > 0) {
-        loadedPrefs.calendar.all_courses = courseCodes;
-        loadedPrefs.tasks.all_courses = courseCodes;
-      }
+      // Store all_courses as local UI state (not in preferences)
+      setAllCourses(courseCodes);
 
       // Migrate empty included_courses to explicit lists
-      if (loadedPrefs.calendar.included_courses.length === 0 && loadedPrefs.calendar.all_courses.length > 0) {
-        loadedPrefs.calendar.included_courses = [...loadedPrefs.calendar.all_courses];
+      if (loadedPrefs.calendar.included_courses.length === 0 && courseCodes.length > 0) {
+        loadedPrefs.calendar.included_courses = [...courseCodes];
       }
-      if (loadedPrefs.tasks.included_courses.length === 0 && loadedPrefs.tasks.all_courses.length > 0) {
-        loadedPrefs.tasks.included_courses = [...loadedPrefs.tasks.all_courses];
+      if (loadedPrefs.tasks.included_courses.length === 0 && courseCodes.length > 0) {
+        loadedPrefs.tasks.included_courses = [...courseCodes];
       }
 
       setPreferences(loadedPrefs);
@@ -158,7 +156,6 @@ const Options = () => {
     if (!preferences) return;
 
     const currentIncluded = preferences[section]?.included_courses || [];
-    const allCourses = preferences[section]?.all_courses || [];
 
     let newIncluded: string[];
 
@@ -326,11 +323,11 @@ const Options = () => {
                 <p className="setting-description">Select which Canvas event types to sync to Google Calendar</p>
               </div>
 
-              {preferences.calendar.all_courses.length > 0 && (
+              {allCourses.length > 0 && (
                 <div className="setting-item">
                   <h4 className="setting-label">Courses to sync to Calendar</h4>
                   <div className="course-list">
-                    {preferences.calendar.all_courses.map(courseCode => {
+                    {allCourses.map(courseCode => {
                       const synced = isCourseSynced(courseCode, 'calendar');
                       return (
                         <div key={courseCode} className="course-item">
@@ -388,11 +385,11 @@ const Options = () => {
                 <p className="setting-description">Select which Canvas event types to sync to Google Tasks</p>
               </div>
 
-              {preferences.tasks.all_courses.length > 0 && (
+              {allCourses.length > 0 && (
                 <div className="setting-item">
                   <h4 className="setting-label">Courses to sync to Tasks</h4>
                   <div className="course-list">
-                    {preferences.tasks.all_courses.map(courseCode => {
+                    {allCourses.map(courseCode => {
                       const synced = isCourseSynced(courseCode, 'tasks');
                       return (
                         <div key={courseCode} className="course-item">
@@ -479,12 +476,54 @@ const Options = () => {
                     })
                   }
                   className="input-select">
-                  <option value="code">Course code (e.g., "CS101")</option>
+                  <option value="code">Course code (e.g., "CS 101")</option>
                   <option value="name">Course name (e.g., "Intro to CS")</option>
-                  <option value="combined">Combined (e.g., "CS101: Intro to CS")</option>
+                  <option value="combined">Combined (e.g., "CS 101: Intro to CS")</option>
                 </select>
                 <p className="setting-description">How to name task lists in Google Tasks</p>
               </div>
+
+              {/* Custom Course Names - only show for 'name' or 'combined' */}
+              {allCourses.length > 0 && preferences.tasks.task_list_naming !== 'code' && (
+                <div className="setting-item">
+                  <h4 className="setting-label">Custom Course Names</h4>
+                  <div className="course-list">
+                    {allCourses.map(courseCode => {
+                      const customName = preferences.course_display_names?.[courseCode] || '';
+                      return (
+                        <div
+                          key={courseCode}
+                          className="course-item"
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="course-name" style={{ minWidth: '80px' }}>
+                            {courseCode}
+                          </span>
+                          <input
+                            type="text"
+                            placeholder="Custom name..."
+                            value={customName}
+                            onChange={e => {
+                              const newNames = { ...preferences.course_display_names };
+                              if (e.target.value) {
+                                newNames[courseCode] = e.target.value;
+                              } else {
+                                delete newNames[courseCode];
+                              }
+                              setPreferences({
+                                ...preferences,
+                                course_display_names: newNames,
+                              });
+                            }}
+                            className="input-text"
+                            style={{ flex: 1, maxWidth: '200px' }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="setting-description">Set custom names for each course (optional)</p>
+                </div>
+              )}
             </section>
 
             {/* Save Button */}

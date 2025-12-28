@@ -35,13 +35,44 @@ import {
   checkSubscription,
   isEdgeFunctionsConfigured,
 } from '@extension/supabase';
-import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport } from '@extension/shared';
+import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport, TaskListNaming } from '@extension/shared';
 import type { CalendarDataState } from '@extension/storage';
 
 // ============= Constants =============
 
 const ALARM_NAME = 'canvas2calendar-sync';
 const DEFAULT_SYNC_INTERVAL_MINUTES = 360; // 6 hours
+
+// ============= Task List Naming Helper =============
+
+/**
+ * Format task list title based on user naming preference
+ * @param courseCode - The course code (e.g., "CSCE331")
+ * @param naming - The naming preference ('code', 'name', or 'combined')
+ * @param customNames - Optional map of course code to custom display name
+ */
+const formatTaskListTitle = (
+  courseCode: string,
+  naming: TaskListNaming,
+  customNames?: Record<string, string>,
+): string => {
+  // Add space between letters and numbers: "CSCE331" -> "CSCE 331"
+  const formattedCode = courseCode.replace(/([A-Za-z]+)(\d+)/, '$1 $2');
+  const customName = customNames?.[courseCode];
+
+  switch (naming) {
+    case 'code':
+      return formattedCode; // "CSCE 331"
+    case 'name':
+      // Use custom name if available, otherwise fallback to formatted code
+      return customName || formattedCode;
+    case 'combined':
+      // If custom name exists: "CSCE 331: Data Structures", otherwise just formatted code
+      return customName ? `${formattedCode}: ${customName}` : formattedCode;
+    default:
+      return formattedCode;
+  }
+};
 
 // ============= Initialization =============
 
@@ -829,20 +860,40 @@ const syncTasks = async (events: CanvasEvent[], preferences: SyncPreferences): P
       let taskList = taskLists[courseCode];
       let googleTaskListId: string;
 
+      // Format the task list title based on user preference
+      const taskListTitle = formatTaskListTitle(
+        courseCode,
+        preferences.tasks.task_list_naming,
+        preferences.course_display_names,
+      );
+
       if (!taskList) {
         // No local record - create new task list
-        const created = await TasksAPI.createTaskList({ title: courseCode });
+        const created = await TasksAPI.createTaskList({ title: taskListTitle });
         if (!created.id) continue;
         googleTaskListId = created.id;
-        taskList = { google_task_list_id: googleTaskListId, title: courseCode, created_at: new Date().toISOString() };
+        taskList = {
+          google_task_list_id: googleTaskListId,
+          title: taskListTitle,
+          created_at: new Date().toISOString(),
+        };
         taskLists[courseCode] = taskList;
-        report.taskLists.created.push({ title: courseCode, id: googleTaskListId });
+        report.taskLists.created.push({ title: taskListTitle, id: googleTaskListId });
       } else {
         // Have local record - verify it still exists in Google (self-healing)
         try {
-          await TasksAPI.getTaskList(taskList.google_task_list_id);
+          const existingList = await TasksAPI.getTaskList(taskList.google_task_list_id);
           googleTaskListId = taskList.google_task_list_id;
-          report.taskLists.existing.push({ title: courseCode, id: googleTaskListId });
+
+          // Rename task list if naming preference changed
+          if (existingList.title !== taskListTitle) {
+            console.log(`[Canvas2Calendar] Renaming task list "${existingList.title}" -> "${taskListTitle}"`);
+            await TasksAPI.updateTaskList(googleTaskListId, { title: taskListTitle });
+            taskList.title = taskListTitle;
+            taskLists[courseCode] = taskList;
+          }
+
+          report.taskLists.existing.push({ title: taskListTitle, id: googleTaskListId });
         } catch (verifyError) {
           if (verifyError instanceof GoogleApiException && (verifyError.isNotFound() || verifyError.isGone())) {
             console.log(`[Canvas2Calendar] Task list "${courseCode}" was deleted externally, recreating...`);
@@ -854,19 +905,19 @@ const syncTasks = async (events: CanvasEvent[], preferences: SyncPreferences): P
               }
             }
 
-            // Recreate task list
-            const created = await TasksAPI.createTaskList({ title: courseCode });
+            // Recreate task list with formatted title
+            const created = await TasksAPI.createTaskList({ title: taskListTitle });
             if (!created.id) continue;
             googleTaskListId = created.id;
             taskList = {
               google_task_list_id: googleTaskListId,
-              title: courseCode,
+              title: taskListTitle,
               created_at: new Date().toISOString(),
             };
             taskLists[courseCode] = taskList;
-            report.taskLists.created.push({ title: courseCode, id: googleTaskListId });
+            report.taskLists.created.push({ title: taskListTitle, id: googleTaskListId });
 
-            console.log(`[Canvas2Calendar] Task list "${courseCode}" recreated successfully`);
+            console.log(`[Canvas2Calendar] Task list "${taskListTitle}" recreated successfully`);
           } else {
             throw verifyError;
           }
