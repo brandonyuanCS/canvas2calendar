@@ -1,7 +1,7 @@
 /**
  * Google Authentication Utilities
- * Uses chrome.identity.launchWebAuthFlow for OAuth
- * This approach works with Web Application OAuth clients
+ * Uses browser tabs for interactive OAuth (supports 2FA like Duo Security)
+ * Uses chrome.identity.launchWebAuthFlow for silent token refresh
  */
 
 import type { GoogleUserInfo, GoogleApiError } from './types.js';
@@ -30,7 +30,7 @@ const storeNonce = async (nonce: string): Promise<void> =>
     chrome.storage.local.set({ [NONCE_STORAGE_KEY]: nonce }, resolve);
   });
 
-const buildAuthUrl = async (): Promise<string> => {
+const buildAuthUrl = async (prompt: 'select_account' | 'none' = 'select_account'): Promise<string> => {
   if (!GOOGLE_CLIENT_ID) {
     throw new Error('GOOGLE_CLIENT_ID environment variable is not set');
   }
@@ -45,7 +45,7 @@ const buildAuthUrl = async (): Promise<string> => {
     redirect_uri: redirectUrl,
     response_type: 'token id_token', // Request both access token and ID token
     scope: OAUTH_SCOPES.join(' '),
-    prompt: 'consent', // Always show consent screen for clarity
+    prompt, // 'select_account' for interactive, 'none' for silent refresh
     nonce: nonce, // Required for id_token - stored for Supabase verification
   });
 
@@ -90,6 +90,62 @@ const getStoredToken = async (): Promise<string | null> =>
   });
 
 /**
+ * Check if token exists but is expiring soon (within 10 minutes)
+ */
+const isTokenExpiringSoon = async (): Promise<boolean> =>
+  new Promise(resolve => {
+    chrome.storage.local.get([TOKEN_STORAGE_KEY, TOKEN_EXPIRY_KEY], result => {
+      const token = result[TOKEN_STORAGE_KEY];
+      const expiry = result[TOKEN_EXPIRY_KEY];
+      const TEN_MINUTES = 10 * 60 * 1000;
+
+      // Token exists but will expire within 10 minutes
+      if (token && expiry && Date.now() > expiry - TEN_MINUTES && Date.now() < expiry) {
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    });
+  });
+
+/**
+ * Attempt silent token refresh using prompt=none
+ * Returns new token if successful, null if user interaction required
+ */
+const silentRefreshToken = async (): Promise<string | null> => {
+  if (!chrome?.identity) {
+    return null;
+  }
+
+  try {
+    const authUrl = await buildAuthUrl('none');
+
+    return new Promise(resolve => {
+      chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: false }, async responseUrl => {
+        if (chrome.runtime.lastError || !responseUrl) {
+          // Silent refresh failed - user interaction required
+          console.log('[Auth] Silent refresh failed, will require interactive auth');
+          resolve(null);
+          return;
+        }
+
+        const tokenData = extractTokenFromUrl(responseUrl);
+        if (!tokenData) {
+          resolve(null);
+          return;
+        }
+
+        await storeToken(tokenData.token, tokenData.expiresIn, tokenData.idToken);
+        console.log('[Auth] Silent token refresh successful');
+        resolve(tokenData.token);
+      });
+    });
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Store token with expiry (and optionally ID token)
  */
 const storeToken = async (token: string, expiresIn: number, idToken?: string | null): Promise<void> => {
@@ -124,6 +180,7 @@ const clearStoredToken = async (): Promise<void> =>
 /**
  * Get an OAuth token using launchWebAuthFlow
  * Opens a popup for user to authenticate with Google
+ * Includes proactive silent refresh when token is about to expire
  */
 export const getAuthToken = async (interactive = true): Promise<string> => {
   if (!chrome?.identity) {
@@ -133,40 +190,97 @@ export const getAuthToken = async (interactive = true): Promise<string> => {
   // Try to use cached token first
   const cachedToken = await getStoredToken();
   if (cachedToken) {
+    // Proactively refresh if token is expiring soon (background, don't block)
+    const expiringSoon = await isTokenExpiringSoon();
+    if (expiringSoon) {
+      // Fire and forget - attempt silent refresh in background
+      silentRefreshToken().catch(() => {
+        // Ignore errors, we still have a valid token
+      });
+    }
     return cachedToken;
   }
 
-  // If not interactive and no cached token, fail
+  // No cached token - try silent refresh first (user may still be logged in with Google)
+  const silentToken = await silentRefreshToken();
+  if (silentToken) {
+    return silentToken;
+  }
+
+  // If not interactive and no token available, fail
   if (!interactive) {
     throw new Error('No cached token available and interactive mode disabled');
   }
 
-  // Launch OAuth flow
-  const authUrl = await buildAuthUrl();
+  // Launch interactive OAuth flow using a full browser tab (supports 2FA like Duo)
+  const authUrl = await buildAuthUrl('select_account');
+  const redirectUrl = getRedirectUrl();
 
   return new Promise((resolve, reject) => {
-    chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async responseUrl => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
+    let authTabId: number | undefined;
+    let resolved = false;
+
+    // Listen for tab URL changes to catch the redirect
+    const onTabUpdated = async (tabId: number, changeInfo: chrome.tabs.TabChangeInfo) => {
+      if (resolved || tabId !== authTabId || !changeInfo.url) return;
+
+      // Check if this is our redirect URL
+      if (changeInfo.url.startsWith(redirectUrl)) {
+        resolved = true;
+
+        // Remove listener
+        chrome.tabs.onUpdated.removeListener(onTabUpdated);
+        chrome.tabs.onRemoved.removeListener(onTabClosed);
+
+        // Extract token from URL
+        const tokenData = extractTokenFromUrl(changeInfo.url);
+
+        // Close the auth tab
+        if (authTabId) {
+          chrome.tabs.remove(authTabId).catch(() => {
+            // Tab may already be closed
+          });
+        }
+
+        if (!tokenData) {
+          reject(new Error('Failed to extract token from OAuth response'));
+          return;
+        }
+
+        // Store token for future use
+        await storeToken(tokenData.token, tokenData.expiresIn, tokenData.idToken);
+        console.log('[Auth] Interactive auth via browser tab successful');
+        resolve(tokenData.token);
       }
+    };
 
-      if (!responseUrl) {
-        reject(new Error('No response URL from OAuth flow'));
-        return;
-      }
+    // Handle tab being closed before auth completes
+    const onTabClosed = (tabId: number) => {
+      if (resolved || tabId !== authTabId) return;
 
-      const tokenData = extractTokenFromUrl(responseUrl);
-      if (!tokenData) {
-        reject(new Error('Failed to extract token from OAuth response'));
-        return;
-      }
+      resolved = true;
+      chrome.tabs.onUpdated.removeListener(onTabUpdated);
+      chrome.tabs.onRemoved.removeListener(onTabClosed);
+      reject(new Error('Authentication cancelled - tab was closed'));
+    };
 
-      // Store token for future use (including ID token for Supabase)
-      await storeToken(tokenData.token, tokenData.expiresIn, tokenData.idToken);
+    // Add listeners before opening tab
+    chrome.tabs.onUpdated.addListener(onTabUpdated);
+    chrome.tabs.onRemoved.addListener(onTabClosed);
 
-      resolve(tokenData.token);
-    });
+    // Open auth URL in a new tab
+    chrome.tabs
+      .create({ url: authUrl, active: true })
+      .then(tab => {
+        authTabId = tab.id;
+        console.log('[Auth] Opened auth tab:', authTabId);
+      })
+      .catch(error => {
+        resolved = true;
+        chrome.tabs.onUpdated.removeListener(onTabUpdated);
+        chrome.tabs.onRemoved.removeListener(onTabClosed);
+        reject(new Error(`Failed to open auth tab: ${error.message}`));
+      });
   });
 };
 
@@ -204,8 +318,9 @@ export const getUserInfo = async (): Promise<GoogleUserInfo> => {
 
 /**
  * Base fetch wrapper for Google APIs with authentication
+ * Includes automatic retry on 401 with fresh token
  */
-export const googleFetch = async <T>(url: string, options: RequestInit = {}): Promise<T> => {
+export const googleFetch = async <T>(url: string, options: RequestInit = {}, _isRetry = false): Promise<T> => {
   const token = await getAuthToken();
 
   const response = await fetch(url, {
@@ -227,9 +342,16 @@ export const googleFetch = async <T>(url: string, options: RequestInit = {}): Pr
   if (!response.ok) {
     const error = data as GoogleApiError;
 
-    // Handle token expiration
+    // Handle token expiration with automatic retry
     if (response.status === 401) {
       await removeCachedToken();
+
+      // Retry once with fresh token
+      if (!_isRetry) {
+        console.log('[Auth] Token expired, attempting refresh and retry...');
+        return googleFetch<T>(url, options, true);
+      }
+
       throw new GoogleApiException('Token expired. Please re-authenticate.', 401);
     }
 

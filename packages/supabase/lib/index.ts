@@ -5,10 +5,14 @@
 // Client
 export { getSupabaseClient, isSupabaseConfigured, resetSupabaseClient } from './client.js';
 
-// Auth
+// Edge Functions (Secure API calls)
+export { getOrCreateUser, checkSubscription, isEdgeFunctionsConfigured } from './edge-functions.js';
+export type { GetOrCreateUserParams, UserResponse, SubscriptionResponse } from './edge-functions.js';
+
+// Auth (deprecated - kept for compatibility)
 export { signInWithGoogleToken, signOut, getSession, getCurrentUser, hasActiveSession } from './auth.js';
 
-// Users
+// Users (deprecated - use Edge Functions instead)
 export {
   upsertUser,
   getUserByGoogleId,

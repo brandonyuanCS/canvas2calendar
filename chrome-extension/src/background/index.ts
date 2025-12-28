@@ -17,8 +17,6 @@ import {
   TasksAPI,
   clearAllCachedTokens,
   GoogleApiException,
-  getStoredIdToken,
-  getStoredNonce,
 } from '@extension/google-api';
 import { icsParser, validateCanvasUrl } from '@extension/ics-parser';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
@@ -32,10 +30,10 @@ import {
   clearAllCanvas2CalData,
 } from '@extension/storage';
 import {
-  signInWithGoogleToken,
   signOut as supabaseSignOut,
-  getSubscriptionTier,
-  isSupabaseConfigured,
+  getOrCreateUser,
+  checkSubscription,
+  isEdgeFunctionsConfigured,
 } from '@extension/supabase';
 import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport } from '@extension/shared';
 import type { CalendarDataState } from '@extension/storage';
@@ -108,7 +106,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
   switch (message.type) {
     case 'SIGN_IN': {
       try {
-        // Step 1: Google OAuth
+        // Single OAuth flow - Google only
         await getAuthToken(true);
         const userInfo = await getUserInfo();
 
@@ -117,49 +115,26 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         // Get existing user data to merge (preserves ICS URL, preferences, etc.)
         const existingUser = await userStorage.get();
 
-        // Step 2: Supabase auth (if configured)
+        // Default subscription values
         let subscriptionTier: 'free' | 'pro' | 'max' = existingUser?.subscription_tier || 'free';
         let subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'trialing' =
           existingUser?.subscription_status || 'active';
-        let supabaseUserId = existingUser?.supabase_user_id;
 
-        console.log('[Canvas2Calendar] Checking Supabase config...');
-        const supabaseIsConfigured = isSupabaseConfigured();
-        console.log('[Canvas2Calendar] isSupabaseConfigured():', supabaseIsConfigured);
-
-        if (supabaseIsConfigured) {
-          console.log('[Canvas2Calendar] Supabase is configured, checking for ID token...');
-          const idToken = await getStoredIdToken();
-          const nonce = await getStoredNonce();
-          console.log(
-            '[Canvas2Calendar] ID token present:',
-            !!idToken,
-            idToken ? `(${idToken.substring(0, 20)}...)` : '',
-          );
-          console.log('[Canvas2Calendar] Nonce present:', !!nonce);
-          if (idToken) {
-            try {
-              const supabaseResult = await signInWithGoogleToken(idToken, {
-                id: userInfo.id,
-                email: userInfo.email,
-                name: userInfo.name,
-                picture: userInfo.picture,
-              });
-
-              if (supabaseResult.success && supabaseResult.user) {
-                supabaseUserId = supabaseResult.user.id;
-                subscriptionTier = supabaseResult.user.subscription_tier;
-                subscriptionStatus = supabaseResult.user.subscription_status;
-                console.log('[Canvas2Calendar] Supabase auth successful, tier:', subscriptionTier);
-              } else {
-                console.warn('[Canvas2Calendar] Supabase auth failed:', supabaseResult.error);
-              }
-            } catch (supabaseError) {
-              console.error('[Canvas2Calendar] Supabase auth error:', supabaseError);
-              // Continue without Supabase - graceful degradation
-            }
-          } else {
-            console.warn('[Canvas2Calendar] No ID token available for Supabase auth');
+        // Create or get user via Edge Function (secure, server-side)
+        if (isEdgeFunctionsConfigured()) {
+          try {
+            const userResponse = await getOrCreateUser({
+              google_user_id: userInfo.id,
+              email: userInfo.email,
+              name: userInfo.name,
+              picture: userInfo.picture,
+            });
+            subscriptionTier = userResponse.subscription_tier;
+            subscriptionStatus = userResponse.subscription_status;
+            console.log('[Canvas2Calendar] User synced via Edge Function, tier:', subscriptionTier);
+          } catch (error) {
+            console.warn('[Canvas2Calendar] Could not sync user via Edge Function:', error);
+            // Continue with cached/default tier - graceful degradation
           }
         }
 
@@ -172,7 +147,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           name: userInfo.name,
           picture: userInfo.picture,
           // Supabase integration
-          supabase_user_id: supabaseUserId,
+          supabase_user_id: existingUser?.supabase_user_id,
           subscription_tier: subscriptionTier,
           subscription_status: subscriptionStatus,
           // Only set defaults if not already set
@@ -200,13 +175,11 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
       await clearAllCachedTokens();
       await chrome.alarms.clear(ALARM_NAME);
 
-      // Sign out from Supabase too
-      if (isSupabaseConfigured()) {
-        try {
-          await supabaseSignOut();
-        } catch {
-          // Ignore Supabase sign out errors
-        }
+      // Sign out from Supabase too (clear any cached session)
+      try {
+        await supabaseSignOut();
+      } catch {
+        // Ignore Supabase sign out errors
       }
 
       // Clear the google_user_id but preserve other user data (ICS URL, preferences)
@@ -230,15 +203,15 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           return { success: false, error: 'Not authenticated' };
         }
 
-        // Try to refresh from Supabase if configured
-        if (isSupabaseConfigured() && user.google_user_id) {
+        // Try to refresh from Edge Function
+        if (isEdgeFunctionsConfigured() && user.google_user_id) {
           try {
-            const tier = await getSubscriptionTier(user.google_user_id);
+            const subscription = await checkSubscription(user.google_user_id);
             return {
               success: true,
               data: {
-                tier,
-                status: user.subscription_status,
+                tier: subscription.tier,
+                status: subscription.status,
               },
             };
           } catch {
