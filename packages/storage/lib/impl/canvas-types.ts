@@ -99,3 +99,12 @@ export interface TaskListsMapState {
 export interface TasksMapState {
   [icsUid: string]: StoredTaskState;
 }
+
+// ============= Subscription Cache =============
+
+export interface SubscriptionCacheState {
+  tier: 'free' | 'pro' | 'max';
+  status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  is_premium: boolean;
+  cached_at: number; // Unix timestamp in ms
+}

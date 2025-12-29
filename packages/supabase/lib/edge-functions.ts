@@ -28,6 +28,17 @@ interface SubscriptionResponse {
   is_premium: boolean;
 }
 
+interface CheckoutParams {
+  google_user_id: string;
+  email: string;
+  success_url?: string;
+  cancel_url?: string;
+}
+
+interface CheckoutResponse {
+  checkout_url: string;
+}
+
 /**
  * Get or create a user via Edge Function
  * This is the secure way to ensure users exist in the database
@@ -87,8 +98,34 @@ export const checkSubscription = async (googleUserId: string): Promise<Subscript
 };
 
 /**
+ * Create a Stripe Checkout session via Edge Function
+ * Returns a checkout URL to redirect the user to
+ */
+export const createCheckoutSession = async (params: CheckoutParams): Promise<CheckoutResponse> => {
+  if (!SUPABASE_URL) {
+    throw new Error('Supabase URL not configured');
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/stripe-checkout`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `Failed to create checkout session: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+/**
  * Check if Supabase Edge Functions are available
  */
 export const isEdgeFunctionsConfigured = (): boolean => Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-export type { GetOrCreateUserParams, UserResponse, SubscriptionResponse };
+export type { GetOrCreateUserParams, UserResponse, SubscriptionResponse, CheckoutParams, CheckoutResponse };

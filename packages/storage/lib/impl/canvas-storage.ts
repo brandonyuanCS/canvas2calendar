@@ -11,6 +11,7 @@ import type {
   EventsMapState,
   TaskListsMapState,
   TasksMapState,
+  SubscriptionCacheState,
 } from './canvas-types.js';
 
 // ============= Storage Keys =============
@@ -22,6 +23,7 @@ const STORAGE_KEYS = {
   EVENTS: 'canvas2cal:events',
   TASK_LISTS: 'canvas2cal:task-lists',
   TASKS: 'canvas2cal:tasks',
+  SUBSCRIPTION_CACHE: 'canvas2cal:subscription-cache',
 } as const;
 
 // ============= Default Values =============
@@ -92,6 +94,18 @@ const tasksStorage = createStorage<TasksMapState>(STORAGE_KEYS.TASKS, DEFAULT_TA
   liveUpdate: false, // Large object, avoid live updates for perf
 });
 
+/**
+ * Subscription cache storage
+ * Caches subscription status to reduce Edge Function calls
+ */
+const subscriptionCacheStorage = createStorage<SubscriptionCacheState | null>(STORAGE_KEYS.SUBSCRIPTION_CACHE, null, {
+  storageEnum: StorageEnum.Local,
+  liveUpdate: true,
+});
+
+// Subscription cache TTL: 5 minutes
+const SUBSCRIPTION_CACHE_TTL_MS = 5 * 60 * 1000;
+
 // ============= Helper Functions =============
 
 /**
@@ -104,6 +118,7 @@ const clearAllCanvas2CalData = async (): Promise<void> => {
   await eventsStorage.set({});
   await taskListsStorage.set({});
   await tasksStorage.set({});
+  await subscriptionCacheStorage.set(null);
 };
 
 /**
@@ -133,6 +148,41 @@ const getCanvas2CalStorageStats = async (): Promise<{
   };
 };
 
+/**
+ * Get cached subscription if still valid (within TTL)
+ * Returns null if cache is expired or doesn't exist
+ */
+const getCachedSubscription = async (): Promise<SubscriptionCacheState | null> => {
+  const cached = await subscriptionCacheStorage.get();
+  if (!cached) return null;
+
+  const now = Date.now();
+  if (now - cached.cached_at > SUBSCRIPTION_CACHE_TTL_MS) {
+    // Cache expired, clear it
+    await subscriptionCacheStorage.set(null);
+    return null;
+  }
+
+  return cached;
+};
+
+/**
+ * Cache subscription status with current timestamp
+ */
+const setCachedSubscription = async (subscription: Omit<SubscriptionCacheState, 'cached_at'>): Promise<void> => {
+  await subscriptionCacheStorage.set({
+    ...subscription,
+    cached_at: Date.now(),
+  });
+};
+
+/**
+ * Clear subscription cache (call on logout or subscription change)
+ */
+const clearSubscriptionCache = async (): Promise<void> => {
+  await subscriptionCacheStorage.set(null);
+};
+
 export {
   userStorage,
   calendarStorage,
@@ -140,6 +190,11 @@ export {
   eventsStorage,
   taskListsStorage,
   tasksStorage,
+  subscriptionCacheStorage,
   clearAllCanvas2CalData,
   getCanvas2CalStorageStats,
+  getCachedSubscription,
+  setCachedSubscription,
+  clearSubscriptionCache,
+  SUBSCRIPTION_CACHE_TTL_MS,
 };

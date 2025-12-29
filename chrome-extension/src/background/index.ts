@@ -28,11 +28,15 @@ import {
   taskListsStorage,
   tasksStorage,
   clearAllCanvas2CalData,
+  getCachedSubscription,
+  setCachedSubscription,
+  clearSubscriptionCache,
 } from '@extension/storage';
 import {
   signOut as supabaseSignOut,
   getOrCreateUser,
   checkSubscription,
+  createCheckoutSession,
   isEdgeFunctionsConfigured,
 } from '@extension/supabase';
 import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport, TaskListNaming } from '@extension/shared';
@@ -256,6 +260,9 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         });
       }
 
+      // Clear subscription cache on sign out
+      await clearSubscriptionCache();
+
       return { success: true, data: null };
     }
 
@@ -266,11 +273,33 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           return { success: false, error: 'Not authenticated' };
         }
 
-        // Try to refresh from Edge Function
+        // Check cache first (5 minute TTL)
+        const cached = await getCachedSubscription();
+        if (cached) {
+          console.log('[Canvas2Calendar] Using cached subscription:', cached.tier);
+          return {
+            success: true,
+            data: {
+              tier: cached.tier,
+              status: cached.status,
+            },
+          };
+        }
+
+        // Cache miss - fetch from Edge Function
         if (isEdgeFunctionsConfigured() && user.google_user_id) {
           try {
             const subscription = await checkSubscription(user.google_user_id);
+            console.log('[Canvas2Calendar] Fetched subscription from Edge Function:', subscription.tier);
 
+            // Cache the result
+            await setCachedSubscription({
+              tier: subscription.tier,
+              status: subscription.status,
+              is_premium: subscription.is_premium,
+            });
+
+            // Also update user storage
             await userStorage.set({
               ...user,
               subscription_tier: subscription.tier,
@@ -285,7 +314,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
               },
             };
           } catch {
-            // Fall back to cached value
+            // Fall back to cached value in user storage
           }
         }
 
@@ -485,6 +514,35 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : 'Failed to fetch metadata' };
+      }
+    }
+
+    case 'CREATE_CHECKOUT_SESSION': {
+      try {
+        const user = await userStorage.get();
+        if (!user?.google_user_id || !user?.email) {
+          return { success: false, error: 'Not authenticated' };
+        }
+
+        if (user.subscription_tier === 'pro') {
+          return { success: false, error: 'Already subscribed to Pro' };
+        }
+
+        if (!isEdgeFunctionsConfigured()) {
+          return { success: false, error: 'Supabase not configured' };
+        }
+
+        const { checkout_url } = await createCheckoutSession({
+          google_user_id: user.google_user_id,
+          email: user.email,
+        });
+
+        // Clear subscription cache so next check fetches fresh data
+        await clearSubscriptionCache();
+
+        return { success: true, data: { checkout_url } };
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to create checkout' };
       }
     }
 
@@ -1201,6 +1259,7 @@ export type BackgroundMessage =
   | { type: 'UPDATE_PREFERENCES'; preferences: Partial<SyncPreferences> }
   | { type: 'CREATE_CALENDAR'; name: string; description?: string }
   | { type: 'RESET_ALL' }
-  | { type: 'GET_CANVAS_METADATA' };
+  | { type: 'GET_CANVAS_METADATA' }
+  | { type: 'CREATE_CHECKOUT_SESSION' };
 
 export type BackgroundResponse<T = unknown> = { success: true; data: T } | { success: false; error: string };
