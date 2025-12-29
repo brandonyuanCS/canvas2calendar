@@ -1,0 +1,289 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:icalendar-ruby
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Brandon Yuan Calendar (Canvas)
+X-WR-CALDESC:Calendar events for the user\, Brandon Yuan
+BEGIN:VEVENT
+DTSTAMP:20251220T143000Z
+UID:event-assignment-3001234
+DTSTART;VALUE=DATE:20251222
+CLASS:PUBLIC
+DESCRIPTION:Complete the final review assignment before winter break. This 
+ assignment covers all material from the semester and is worth 50 points.\n
+ \nSubmit your completed responses via Gradescope by the deadline.
+SEQUENCE:0
+SUMMARY:Final Review Assignment [CSCE-331:916\,970]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_4070
+ 74&month=12&year=2025#assignment_3001234
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Complete the final review assignment before
+  winter break. This assignment covers all material from the semester and i
+ s worth 50 points.</p>\n<p>Submit your completed responses via Gradescope 
+ by the deadline.</p><script src="https://instructure-uploads-pdx.s3.us-wes
+ t-2.amazonaws.com/account_159240000000000001/attachments/83077692/dp_app.j
+ s"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251218T091500Z
+UID:event-calendar-event-1200500
+DTSTART:20251223T140000Z
+DTEND:20251223T160000Z
+CLASS:PUBLIC
+DESCRIPTION:Optional office hours session to review final exam material an
+ d answer questions before the winter break.\n\nZoom link: [https://tamu.zo
+ om.us/j/12345678901] (https://tamu.zoom.us/j/12345678901)
+LOCATION:Zoom Online Meeting
+SEQUENCE:0
+SUMMARY:Pre-Break Office Hours [CSCE 481 599:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3963
+ 33&month=12&year=2025#calendar_event_1200500
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Optional office hours session to review fin
+ al exam material and answer questions before the winter break.</p>\n<p>Zoo
+ m link: <a class="inline_disabled" href="https://tamu.zoom.us/j/1234567890
+ 1" target="_blank">https://tamu.zoom.us/j/12345678901</a></p><script src="
+ https://instructure-uploads-pdx.s3.us-west-2.amazonaws.com/account_1592400
+ 00000000001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251219T102000Z
+UID:event-assignment-3001567
+DTSTART;VALUE=DATE:20251224
+CLASS:PUBLIC
+DESCRIPTION:********\nPERF 301\n********\n\nReflection Essay: Performance 
+ and Holiday Traditions\n\nWrite a 500-750 word reflection on how holiday t
+ raditions can be understood as performance. Consider concepts such as:\n\n
+ * Ritual and repetition\n* Embodiment\n* Cultural identity\n* Family and c
+ ommunity performance\n\nSubmit as a PDF or Word document.
+SEQUENCE:0
+SUMMARY:Holiday Traditions Reflection [PERF 301 701:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3989
+ 49&month=12&year=2025#assignment_3001567
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><h1>PERF 301</h1>\n<p><strong>Reflection Essay
+ : Performance and Holiday Traditions</strong></p>\n<p>Write a 500-750 word
+  reflection on how holiday traditions can be understood as performance. Co
+ nsider concepts such as:</p>\n<ul>\n<li>Ritual and repetition</li>\n<li>Em
+ bodiment</li>\n<li>Cultural identity</li>\n<li>Family and community perfor
+ mance</li>\n</ul>\n<p>Submit as a PDF or Word document.</p><script src="ht
+ tps://instructure-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000
+ 000000001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251220T083000Z
+UID:event-assignment-3001890
+DTSTART;VALUE=DATE:20251226
+CLASS:PUBLIC
+DESCRIPTION:Complete the optional extra credit assignment for CSCE 481. Th
+ is assignment involves writing a brief summary (250-300 words) of a recent
+  research paper in computer science.\n\nFind a paper published in 2025 fro
+ m a reputable conference or journal\, read it\, and summarize:\n* The main
+  problem addressed\n* The proposed solution\n* Key results and contributio
+ ns\n\nWorth up to 10 bonus points.
+SEQUENCE:0
+SUMMARY:Extra Credit: Research Paper Summary [CSCE 481 599:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3963
+ 33&month=12&year=2025#assignment_3001890
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Complete the optional extra credit assignme
+ nt for CSCE 481. This assignment involves writing a brief summary (250-300
+  words) of a recent research paper in computer science.</p>\n<p>Find a pap
+ er published in 2025 from a reputable conference or journal\, read it\, an
+ d summarize:</p>\n<ul>\n<li>The main problem addressed</li>\n<li>The propo
+ sed solution</li>\n<li>Key results and contributions</li>\n</ul>\n<p>Worth
+  up to 10 bonus points.</p><script src="https://instructure-uploads-pdx.s3
+ .us-west-2.amazonaws.com/account_159240000000000001/attachments/83077692/d
+ p_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251221T154500Z
+UID:event-calendar-event-1200789
+DTSTART:20251227T180000Z
+DTEND:20251227T190000Z
+CLASS:PUBLIC
+DESCRIPTION:Virtual study group session to prepare for upcoming spring sem
+ ester coursework. Organized by students\, facilitated via Discord.\n\nJoin
+  the Discord server at: discord.gg/tamu-csce
+LOCATION:Online - Discord
+SEQUENCE:0
+SUMMARY:Winter Break Study Session [CSCE-331:916\,970]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_4070
+ 74&month=12&year=2025#calendar_event_1200789
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Virtual study group session to prepare for 
+ upcoming spring semester coursework. Organized by students\, facilitated v
+ ia Discord.</p>\n<p>Join the Discord server at: discord.gg/tamu-csce</p><s
+ cript src="https://instructure-uploads-pdx.s3.us-west-2.amazonaws.com/acco
+ unt_159240000000000001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251222T113000Z
+UID:event-assignment-3002123
+DTSTART;VALUE=DATE:20251228
+CLASS:PUBLIC
+DESCRIPTION:Optional reading assignment for winter break. Read Chapter 15 
+ from the textbook covering advanced software testing methodologies.\n\nWhi
+ le not required\, this reading will provide helpful context for Spring 202
+ 6 coursework.\n\nNo submission required.
+SEQUENCE:0
+SUMMARY:Optional Reading: Advanced Testing [CSCE-331:916\,970]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_4070
+ 74&month=12&year=2025#assignment_3002123
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Optional reading assignment for winter brea
+ k. Read Chapter 15 from the textbook covering advanced software testing me
+ thodologies.</p>\n<p>While not required\, this reading will provide helpfu
+ l context for Spring 2026 coursework.</p>\n<p>No submission required.</p><
+ script src="https://instructure-uploads-pdx.s3.us-west-2.amazonaws.com/acc
+ ount_159240000000000001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251223T090000Z
+UID:event-calendar-event-1201001
+DTSTART:20251229T150000Z
+DTEND:20251229T160000Z
+CLASS:PUBLIC
+DESCRIPTION:End-of-year celebration and networking event for Computer Scie
+ nce honors students. Join us for casual conversation\, refreshments\, and 
+ an opportunity to connect with peers and faculty.\n\nLocation: PETR 108\nR
+ SVP via the EventBrite link in the course announcements.
+LOCATION:PETR 108
+SEQUENCE:0
+SUMMARY:CS Honors Year-End Social [CSCE 481 599:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3963
+ 33&month=12&year=2025#calendar_event_1201001
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>End-of-year celebration and networking even
+ t for Computer Science honors students. Join us for casual conversation\, 
+ refreshments\, and an opportunity to connect with peers and faculty.</p>\n
+ <p><strong>Location:</strong> PETR 108<br><strong>RSVP</strong> via the Ev
+ entBrite link in the course announcements.</p><script src="https://instruct
+ ure-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/atta
+ chments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251224T141500Z
+UID:event-assignment-3002456
+DTSTART;VALUE=DATE:20251230
+CLASS:PUBLIC
+DESCRIPTION:Winter Break Survey\n\nPlease complete this brief 5-minute sur
+ vey about your experience in PERF 301 this semester. Your feedback helps u
+ s improve the course for future students.\n\nThe survey covers:\n* Course 
+ content and materials\n* Instructor effectiveness\n* Assignment workload\n
+ * Overall satisfaction\n\nCompletion is optional but appreciated.
+SEQUENCE:0
+SUMMARY:End of Semester Feedback Survey [PERF 301 701:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3989
+ 49&month=12&year=2025#assignment_3002456
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><h3>Winter Break Survey</h3>\n<p>Please comple
+ te this brief 5-minute survey about your experience in PERF 301 this semes
+ ter. Your feedback helps us improve the course for future students.</p>\n<
+ p>The survey covers:</p>\n<ul>\n<li>Course content and materials</li>\n<li
+ >Instructor effectiveness</li>\n<li>Assignment workload</li>\n<li>Overall 
+ satisfaction</li>\n</ul>\n<p>Completion is optional but appreciated.</p><s
+ cript src="https://instructure-uploads-pdx.s3.us-west-2.amazonaws.com/acco
+ unt_159240000000000001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251226T103000Z
+UID:event-assignment-3002789
+DTSTART;VALUE=DATE:20251231
+CLASS:PUBLIC
+DESCRIPTION:[] (https://canvas.tamu.edu/courses/407074/files/86613612/previ
+ ew)Instructions\n---------------------------------------------------------
+ ---------------------\n\nThis is a reflection assignment to help you think
+  about your academic and personal goals for the new year.\n\nWrite a 300-5
+ 00 word reflection addressing:\n* Your proudest accomplishment from Fall 2
+ 025\n* One area where you'd like to improve in Spring 2026\n* A specific a
+ cademic or career goal for the new year\n* Steps you'll take to achieve th
+ at goal\n\n[] (https://canvas.tamu.edu/courses/407074/files/86613611/previ
+ ew)Submission\n------------------------------------------------------------
+ -----------------\n\nSubmit as a PDF or text entry directly to Canvas.
+SEQUENCE:0
+SUMMARY:New Year Goals Reflection [Individual] [CSCE-331:916\,970]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_4070
+ 74&month=12&year=2025#assignment_3002789
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><h3><img id="56123585" role="presentation" src
+ ="https://canvas.tamu.edu/courses/407074/files/86613612/preview" alt="" da
+ ta-api-endpoint="https://canvas.tamu.edu/api/v1/courses/407074/files/86613
+ 612" data-api-returntype="File" loading="lazy">Instructions</h3>\n<p>This 
+ is a reflection assignment to help you think about your academic and perso
+ nal goals for the new year.</p>\n<p>Write a 300-500 word reflection addres
+ sing:</p>\n<ul>\n<li>Your proudest accomplishment from Fall 2025</li>\n<li
+ >One area where you'd like to improve in Spring 2026</li>\n<li>A specific 
+ academic or career goal for the new year</li>\n<li>Steps you'll take to ac
+ hieve that goal</li>\n</ul>\n<hr>\n<h3><img id="56123584" role="presentati
+ on" src="https://canvas.tamu.edu/courses/407074/files/86613611/preview" al
+ t="" data-api-endpoint="https://canvas.tamu.edu/api/v1/courses/407074/file
+ s/86613611" data-api-returntype="File" loading="lazy">Submission</h3>\n<p>
+ Submit as a PDF or text entry directly to Canvas.</p><script src="https://
+ instructure-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000
+ 001/attachments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251227T120000Z
+UID:event-calendar-event-1201234
+DTSTART:20260101T190000Z
+DTEND:20260101T200000Z
+CLASS:PUBLIC
+DESCRIPTION:Informational webinar about Spring 2026 capstone project optio
+ ns. Learn about available projects\, team formation\, and timeline.\n\nThi
+ s is an optional session but highly recommended for students planning to e
+ nroll in CSCE 482 in Spring 2026.\n\nZoom link will be posted in Canvas an
+ nouncements.
+LOCATION:Zoom Online Meeting
+SEQUENCE:0
+SUMMARY:Spring 2026 Capstone Info Session [CSCE 481 599:]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_3963
+ 33&month=01&year=2026#calendar_event_1201234
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Informational webinar about Spring 2026 cap
+ stone project options. Learn about available projects\, team formation\, a
+ nd timeline.</p>\n<p>This is an optional session but highly recommended fo
+ r students planning to enroll in CSCE 482 in Spring 2026.</p>\n<p>Zoom lin
+ k will be posted in Canvas announcements.</p><script src="https://instruct
+ ure-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/atta
+ chments/83077692/dp_app.js"></script>
+END:VEVENT
+BEGIN:VEVENT
+DTSTAMP:20251228T094500Z
+UID:event-assignment-3003012
+DTSTART;VALUE=DATE:20260102
+CLASS:PUBLIC
+DESCRIPTION:Welcome back! This brief assignment helps you prepare for the 
+ Spring 2026 semester.\n\nTasks:\n* Review the Spring 2026 course syllabus 
+ (posted in Canvas)\n* Complete the pre-semester skills assessment quiz (10
+  questions\, untimed)\n* Introduce yourself in the Spring 2026 discussion 
+ board\n\nThis assignment is worth 10 points and should take approximately 
+ 20-30 minutes to complete.
+SEQUENCE:0
+SUMMARY:Spring 2026 Preparation Assignment [CSCE-331:916\,970]
+URL;VALUE=URI:https://canvas.tamu.edu/calendar?include_contexts=course_4070
+ 74&month=01&year=2026#assignment_3003012
+X-ALT-DESC;FMTTYPE=text/html:<link rel="stylesheet" href="https://instructu
+ re-uploads-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attac
+ hments/83077693/dp_app.css"><p>Welcome back! This brief assignment helps y
+ ou prepare for the Spring 2026 semester.</p>\n<p><strong>Tasks:</strong></
+ p>\n<ul>\n<li>Review the Spring 2026 course syllabus (posted in Canvas)</l
+ i>\n<li>Complete the pre-semester skills assessment quiz (10 questions\, u
+ ntimed)</li>\n<li>Introduce yourself in the Spring 2026 discussion board</
+ li>\n</ul>\n<p>This assignment is worth 10 points and should take approxim
+ ately 20-30 minutes to complete.</p><script src="https://instructure-uploa
+ ds-pdx.s3.us-west-2.amazonaws.com/account_159240000000000001/attachments/8
+ 3077692/dp_app.js"></script>
+END:VEVENT
+END:VCALENDAR

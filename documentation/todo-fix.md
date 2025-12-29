@@ -1,0 +1,2 @@
+- ~~empty ICS file -> no UI, doesn't show 0 tasks or anything~~ ✅ Fixed
+- ~~remember to uncomment the validation checks for ICS validator~~ ✅ Done

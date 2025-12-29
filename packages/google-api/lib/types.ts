@@ -13,6 +13,7 @@ export interface GoogleEvent {
   summary?: string;
   description?: string;
   location?: string;
+  colorId?: string; // "1" to "11" - Google Calendar preset colors
   start?: {
     date?: string; // For all-day events (YYYY-MM-DD)
     dateTime?: string; // For timed events (ISO 8601)

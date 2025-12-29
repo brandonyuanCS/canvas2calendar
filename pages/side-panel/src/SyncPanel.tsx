@@ -383,62 +383,74 @@ export default function SyncPanel() {
                   </span>
                 </div>
 
-                <div className="sync-stats">
-                  <div className="sync-stat">
-                    <span className="sync-stat-label">Parsed</span>
-                    <span className="sync-stat-value">{syncReport.report?.metadata.total_events_parsed}</span>
+                {syncReport.report?.metadata.total_events_parsed === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">📭</div>
+                    <p className="empty-state-text">No events found in your Canvas feed</p>
+                    <p className="empty-state-hint text-muted text-xs">
+                      This could mean your calendar is empty, or check that your ICS URL is correct.
+                    </p>
                   </div>
-                  <div className="sync-stat">
-                    <span className="sync-stat-label">Calendar</span>
-                    <span className="sync-stat-value text-accent">
-                      {syncReport.report?.metadata.events_to_calendar}
-                    </span>
-                  </div>
-                  <div className="sync-stat">
-                    <span className="sync-stat-label">Tasks</span>
-                    <span className="sync-stat-value" style={{ color: 'var(--color-success)' }}>
-                      {syncReport.report?.metadata.events_to_tasks}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="sync-details">
-                  <div className="sync-detail-group">
-                    <span className="sync-detail-title">Calendar</span>
-                    <div className="sync-detail-counts">
-                      <span className="sync-detail-count" style={{ color: 'var(--color-success)' }}>
-                        +{syncReport.report?.calendar.details?.created?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count" style={{ color: 'var(--color-accent)' }}>
-                        ~{syncReport.report?.calendar.details?.updated?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count" style={{ color: 'var(--color-error)' }}>
-                        -{syncReport.report?.calendar.details?.deleted?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count text-muted">
-                        ={syncReport.report?.calendar.details?.unchanged?.length ?? 0}
-                      </span>
+                ) : (
+                  <>
+                    <div className="sync-stats">
+                      <div className="sync-stat">
+                        <span className="sync-stat-label">Parsed</span>
+                        <span className="sync-stat-value">{syncReport.report?.metadata.total_events_parsed}</span>
+                      </div>
+                      <div className="sync-stat">
+                        <span className="sync-stat-label">Calendar</span>
+                        <span className="sync-stat-value text-accent">
+                          {syncReport.report?.metadata.events_to_calendar}
+                        </span>
+                      </div>
+                      <div className="sync-stat">
+                        <span className="sync-stat-label">Tasks</span>
+                        <span className="sync-stat-value" style={{ color: 'var(--color-success)' }}>
+                          {syncReport.report?.metadata.events_to_tasks}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="sync-detail-group">
-                    <span className="sync-detail-title">Tasks</span>
-                    <div className="sync-detail-counts">
-                      <span className="sync-detail-count" style={{ color: 'var(--color-success)' }}>
-                        +{syncReport.report?.tasks.details?.tasks?.created?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count" style={{ color: 'var(--color-accent)' }}>
-                        ~{syncReport.report?.tasks.details?.tasks?.updated?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count" style={{ color: 'var(--color-error)' }}>
-                        -{syncReport.report?.tasks.details?.tasks?.deleted?.length ?? 0}
-                      </span>
-                      <span className="sync-detail-count text-muted">
-                        ={syncReport.report?.tasks.details?.tasks?.unchanged?.length ?? 0}
-                      </span>
+                    <div className="sync-details">
+                      <div className="sync-detail-group">
+                        <span className="sync-detail-title">Calendar</span>
+                        <div className="sync-detail-counts">
+                          <span className="sync-detail-count" style={{ color: 'var(--color-success)' }}>
+                            +{syncReport.report?.calendar.details?.created?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count" style={{ color: 'var(--color-accent)' }}>
+                            ~{syncReport.report?.calendar.details?.updated?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count" style={{ color: 'var(--color-error)' }}>
+                            -{syncReport.report?.calendar.details?.deleted?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count text-muted">
+                            ={syncReport.report?.calendar.details?.unchanged?.length ?? 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="sync-detail-group">
+                        <span className="sync-detail-title">Tasks</span>
+                        <div className="sync-detail-counts">
+                          <span className="sync-detail-count" style={{ color: 'var(--color-success)' }}>
+                            +{syncReport.report?.tasks.details?.tasks?.created?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count" style={{ color: 'var(--color-accent)' }}>
+                            ~{syncReport.report?.tasks.details?.tasks?.updated?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count" style={{ color: 'var(--color-error)' }}>
+                            -{syncReport.report?.tasks.details?.tasks?.deleted?.length ?? 0}
+                          </span>
+                          <span className="sync-detail-count text-muted">
+                            ={syncReport.report?.tasks.details?.tasks?.unchanged?.length ?? 0}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             )}
           </div>

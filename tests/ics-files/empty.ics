@@ -1,0 +1,8 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:icalendar-ruby
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Empty Test Calendar (Canvas)
+X-WR-CALDESC:A calendar with no events for testing
+END:VCALENDAR

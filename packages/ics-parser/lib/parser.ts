@@ -23,7 +23,7 @@ export class ICSParser {
     }
 
     const parsed = new URL(url);
-    const validUrl = `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+    const validUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
 
     // Add timeout using AbortController
     const controller = new AbortController();
@@ -59,11 +59,12 @@ export class ICSParser {
       return text;
     } catch (error) {
       clearTimeout(timeoutId);
+      console.error('[ICSParser] Fetch error:', error);
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('Request timeout: ICS feed took too long to respond');
       }
-      // Don't expose internal error details
-      throw new Error('Failed to fetch ICS feed');
+      // Don't expose internal error details in the final throw but log them
+      throw new Error(`Failed to fetch ICS feed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -95,9 +96,10 @@ export class ICSParser {
         timezone: (comp.getFirstPropertyValue('x-wr-timezone') as string) || undefined,
         lastUpdated: new Date(),
       };
-    } catch {
+    } catch (error) {
+      console.error('[ICSParser] Parsing failure:', error);
       // Don't leak internal error details
-      throw new Error('ICS parsing failed: invalid file format');
+      throw new Error(`ICS parsing failed: ${error instanceof Error ? error.message : 'invalid file format'}`);
     }
   }
 

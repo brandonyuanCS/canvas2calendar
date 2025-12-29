@@ -59,10 +59,11 @@ export const validateCanvasUrl = (url: string): CanvasUrlValidation => {
  */
 export const extractCanvasDomain = (url: string): string | null => {
   const validation = validateCanvasUrl(url);
-  if (!validation.isValid || !validation.hostname) {
+  if (!validation.isValid) {
     return null;
   }
-  return `https://${validation.hostname}`;
+  const parsed = new URL(url);
+  return `${parsed.protocol}//${parsed.host}`;
 };
 
 /**
@@ -75,5 +76,5 @@ export const buildSafeUrl = (url: string): string | null => {
   }
 
   const parsed = new URL(url);
-  return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+  return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
 };

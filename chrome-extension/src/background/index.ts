@@ -74,6 +74,38 @@ const formatTaskListTitle = (
   }
 };
 
+// ============= Calendar Color Helper =============
+
+/**
+ * Get the colorId for an event based on course and preferences
+ * @param courseCode - The course code (e.g., "CSCE331")
+ * @param preferences - User sync preferences
+ * @returns colorId string ("1"-"11") or undefined if no color set
+ */
+const getEventColorId = (courseCode: string | undefined, preferences: SyncPreferences): string | undefined => {
+  if (!preferences.calendar.color_coding_enabled || !courseCode) {
+    return undefined;
+  }
+  return preferences.calendar.course_colors[courseCode] || undefined;
+};
+
+// ============= Calendar Event Summary Helper =============
+
+/**
+ * Format calendar event summary with course code appended
+ * @param summary - The event summary/title
+ * @param courseCode - The course code (e.g., "CSCE331")
+ * @returns Formatted summary like "Event Name (CSCE 331)"
+ */
+const formatCalendarEventSummary = (summary: string, courseCode?: string): string => {
+  if (!courseCode) {
+    return summary;
+  }
+  // Add space between letters and numbers: "CSCE331" -> "CSCE 331"
+  const formattedCode = courseCode.replace(/([A-Za-z]+)(\d+)/, '$1 $2');
+  return `${summary} (${formattedCode})`;
+};
+
 // ============= Initialization =============
 
 console.log('[Canvas2Calendar] Background service worker loaded');
@@ -238,6 +270,13 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         if (isEdgeFunctionsConfigured() && user.google_user_id) {
           try {
             const subscription = await checkSubscription(user.google_user_id);
+
+            await userStorage.set({
+              ...user,
+              subscription_tier: subscription.tier,
+              subscription_status: subscription.status,
+            });
+
             return {
               success: true,
               data: {
@@ -543,8 +582,17 @@ const runSync = async (
       `[Canvas2Calendar] Filter: ${parsedICS.events.length} total, ${calendarEvents.length} for calendar, ${taskEvents.length} for tasks`,
     );
     console.log(
-      `[Canvas2Calendar] Prefs: calendar.event_types=${JSON.stringify(preferences.calendar.event_types)}, tasks.event_types=${JSON.stringify(preferences.tasks.event_types)}`,
+      `[Canvas2Calendar] Prefs: calendar.event_types=${JSON.stringify(preferences.calendar.event_types)}, calendar.included_courses=${JSON.stringify(preferences.calendar.included_courses)}`,
     );
+    console.log(
+      `[Canvas2Calendar] Prefs: tasks.event_types=${JSON.stringify(preferences.tasks.event_types)}, tasks.included_courses=${JSON.stringify(preferences.tasks.included_courses)}`,
+    );
+    // Debug: Log each event's classification
+    for (const event of parsedICS.events) {
+      console.log(
+        `[Canvas2Calendar] Event: "${event.summary}" | type=${event.eventType} | course=${event.courseCode || 'none'}`,
+      );
+    }
 
     const filteredOut = totalEventsParsed - Math.max(calendarEvents.length, taskEvents.length);
 
@@ -671,9 +719,11 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
 
       if (!existing) {
         // Create
+        console.log(`[Canvas2Calendar] Creating event: "${event.summary}" (${event.courseCode})`);
         const googleEvent = await CalendarAPI.createEvent(calendar.google_calendar_id, {
-          summary: event.summary,
+          summary: formatCalendarEventSummary(event.summary, event.courseCode),
           description: event.description,
+          colorId: getEventColorId(event.courseCode, preferences),
           start: event.isAllDay
             ? { date: event.dtstart.toISOString().split('T')[0] }
             : { dateTime: event.dtstart.toISOString() },
@@ -683,6 +733,8 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
           location: event.location,
           extendedProperties: { private: { ics_uid: icsUid, event_hash: hash, source: 'canvas2calendar' } },
         });
+
+        console.log(`[Canvas2Calendar] createEvent response:`, JSON.stringify(googleEvent, null, 2));
 
         if (googleEvent.id) {
           existingEvents[icsUid] = {
@@ -700,13 +752,17 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
             updated_at: new Date().toISOString(),
           };
           report.created.push({ ics_uid: icsUid, title: event.summary, id: googleEvent.id });
+          console.log(`[Canvas2Calendar] ✓ Event created with ID: ${googleEvent.id}`);
+        } else {
+          console.warn(`[Canvas2Calendar] ⚠ createEvent returned no ID for: "${event.summary}"`);
         }
       } else if (existing.event_hash !== hash) {
         // Update - but handle case where event was deleted externally
         try {
           await CalendarAPI.updateEvent(calendar.google_calendar_id, existing.google_event_id, {
-            summary: event.summary,
+            summary: formatCalendarEventSummary(event.summary, event.courseCode),
             description: event.description,
+            colorId: getEventColorId(event.courseCode, preferences),
             start: event.isAllDay
               ? { date: event.dtstart.toISOString().split('T')[0] }
               : { dateTime: event.dtstart.toISOString() },
@@ -737,8 +793,9 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
 
             // Recreate the event
             const googleEvent = await CalendarAPI.createEvent(calendar.google_calendar_id, {
-              summary: event.summary,
+              summary: formatCalendarEventSummary(event.summary, event.courseCode),
               description: event.description,
+              colorId: getEventColorId(event.courseCode, preferences),
               start: event.isAllDay
                 ? { date: event.dtstart.toISOString().split('T')[0] }
                 : { dateTime: event.dtstart.toISOString() },
@@ -774,6 +831,7 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
         report.unchanged.push({ ics_uid: icsUid, title: event.summary });
       }
     } catch (error) {
+      console.error(`[Canvas2Calendar] ✗ Error processing event "${event.summary}":`, error);
       report.errors.push({ ics_uid: icsUid, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
@@ -834,6 +892,14 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
   }
 
   await eventsStorage.set(existingEvents);
+
+  console.log(
+    `[Canvas2Calendar] Calendar sync complete: ${report.created.length} created, ${report.updated.length} updated, ${report.deleted.length} deleted, ${report.unchanged.length} unchanged, ${report.errors.length} errors`,
+  );
+  if (report.errors.length > 0) {
+    console.error(`[Canvas2Calendar] Calendar sync errors:`, report.errors);
+  }
+
   return report;
 };
 

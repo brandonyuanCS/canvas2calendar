@@ -346,6 +346,67 @@ const Options = () => {
                   <p className="setting-description">Select which courses to include in Calendar sync</p>
                 </div>
               )}
+
+              {/* Color Coding */}
+              <div className="setting-item">
+                <label className="checkbox-label checkbox-label-inline">
+                  <input
+                    type="checkbox"
+                    checked={preferences.calendar.color_coding_enabled}
+                    onChange={e => updatePreference('calendar', { color_coding_enabled: e.target.checked })}
+                  />
+                  <span>Enable color coding</span>
+                </label>
+                <p className="setting-description">Assign colors to events based on course</p>
+              </div>
+
+              {preferences.calendar.color_coding_enabled && allCourses.length > 0 && (
+                <div className="setting-item">
+                  <h4 className="setting-label">Course Colors</h4>
+                  <div className="course-list">
+                    {allCourses.map(courseCode => {
+                      const colorId = preferences.calendar.course_colors[courseCode] || '';
+                      return (
+                        <div
+                          key={courseCode}
+                          className="course-item"
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="course-name" style={{ minWidth: '80px' }}>
+                            {courseCode}
+                          </span>
+                          <select
+                            value={colorId}
+                            onChange={e => {
+                              const newColors = { ...preferences.calendar.course_colors };
+                              if (e.target.value) {
+                                newColors[courseCode] = e.target.value;
+                              } else {
+                                delete newColors[courseCode];
+                              }
+                              updatePreference('calendar', { course_colors: newColors });
+                            }}
+                            className="input-select"
+                            style={{ flex: 1, maxWidth: '150px' }}>
+                            <option value="">Default</option>
+                            <option value="1">Lavender</option>
+                            <option value="2">Sage</option>
+                            <option value="3">Grape</option>
+                            <option value="4">Flamingo</option>
+                            <option value="5">Banana</option>
+                            <option value="6">Tangerine</option>
+                            <option value="7">Peacock</option>
+                            <option value="8">Graphite</option>
+                            <option value="9">Blueberry</option>
+                            <option value="10">Basil</option>
+                            <option value="11">Tomato</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="setting-description">Colors will apply on next sync</p>
+                </div>
+              )}
             </section>
 
             {/* Tasks Settings */}
