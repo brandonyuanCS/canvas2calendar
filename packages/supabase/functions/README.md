@@ -6,7 +6,7 @@ This directory contains Supabase Edge Functions that run in Deno and are deploye
 
 - **These files will show TypeScript errors in VS Code** because they use Deno-specific imports (URLs) and the `Deno` runtime. This is expected.
 - These functions are NOT bundled with the extension. They are deployed directly to Supabase.
-- The `supabase/functions/` directory follows Supabase's expected structure.
+- The `packages/supabase/functions/` directory follows Supabase's expected structure.
 
 ## Available Functions
 

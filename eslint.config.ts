@@ -31,7 +31,7 @@ export default defineConfig([
       '**/dist/**',
       '**/node_modules/**',
       'chrome-extension/manifest.js',
-      'supabase/functions/**',
+      'packages/supabase/functions/**',
     ],
   },
   {
