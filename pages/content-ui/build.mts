@@ -9,6 +9,9 @@ const rootDir = resolve(import.meta.dirname);
 const srcDir = resolve(rootDir, 'src');
 const matchesDir = resolve(srcDir, 'matches');
 
+// Convert hyphenated names to camelCase for valid JS identifier
+const toCamelCase = (str: string) => str.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
 const configs = Object.entries(getContentScriptEntries(matchesDir)).map(([name, entry]) => ({
   name,
   config: withPageConfig({
@@ -22,10 +25,10 @@ const configs = Object.entries(getContentScriptEntries(matchesDir)).map(([name, 
     plugins: [IS_DEV && makeEntryPointPlugin()],
     build: {
       lib: {
-        name: name,
+        name: toCamelCase(name), // Use camelCase for IIFE name
         formats: ['iife'],
         entry,
-        fileName: name,
+        fileName: name, // Keep original name for filename
       },
       outDir: resolve(rootDir, '..', '..', 'dist', 'content-ui'),
     },

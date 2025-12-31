@@ -24,7 +24,8 @@
     "@extension/shared": "workspace:*",
     "@extension/ui": "workspace:*",
     "@extension/i18n": "workspace:*",
-    "@extension/env": "workspace:*"
+    "@extension/env": "workspace:*",
+    "lucide-react": "^0.562.0"
   },
   "devDependencies": {
     "@extension/hmr": "workspace:*",

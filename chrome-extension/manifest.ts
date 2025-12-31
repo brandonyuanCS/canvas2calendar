@@ -30,7 +30,7 @@ const manifest = {
   },
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
-  host_permissions: ['<all_urls>'],
+  host_permissions: ['https://www.googleapis.com/*', 'https://*.supabase.co/*'],
   permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity', 'sidePanel', 'alarms'],
   options_ui: {
     page: 'options/index.html',
@@ -48,35 +48,16 @@ const manifest = {
   },
   content_scripts: [
     {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content-ui/all.iife.js'],
-    },
-    {
-      matches: ['https://example.com/*'],
-      js: ['content-ui/example.iife.js'],
-    },
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      css: ['content.css'],
-    },
-    {
-      matches: ['http://*/*', 'https://*/*', '<all_urls>'],
-      js: ['content/all.iife.js'],
-    },
-    {
-      matches: ['https://example.com/*'],
-      js: ['content/example.iife.js'],
+      matches: ['https://calendar.google.com/*'],
+      js: ['content-ui/google-calendar.iife.js'],
     },
   ],
   web_accessible_resources: [
     {
       resources: ['*.js', '*.css', '*.svg', 'icon-128.png', 'icon-34.png'],
-      matches: ['*://*/*'],
+      matches: ['https://calendar.google.com/*'],
     },
   ],
-  side_panel: {
-    default_path: 'side-panel/index.html',
-  },
 } satisfies ManifestType;
 
 export default manifest;
