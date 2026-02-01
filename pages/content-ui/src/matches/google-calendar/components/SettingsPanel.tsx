@@ -13,14 +13,75 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
+  Input,
+  RangeSlider,
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+  Checkbox,
+  RadioGroup,
+  RadioGroupItem,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@extension/ui';
-import { RefreshCw, Clock, Settings2, Palette, Crown } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { RefreshCw, Clock, Calendar, ListTodo, Crown, Sliders } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SubscriptionData } from './TrialBanner';
+import type { SyncPreferences, CanvasEventType } from '@extension/shared';
 
 interface SettingsPanelProps {
   subscriptionData: SubscriptionData;
 }
+
+// ⚠️ IMPORTANT: These must be defined OUTSIDE the component to prevent re-creation on each render
+// Moving them inside causes React to lose input focus after every keystroke
+interface FeatureGateProps {
+  children: React.ReactNode;
+  locked: boolean;
+  label: string;
+}
+
+const FeatureGate = ({ children, locked, label }: FeatureGateProps) => {
+  if (!locked) return <>{children}</>;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative">
+          <div className="pointer-events-none opacity-50">{children}</div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Badge variant="secondary" className="gap-1">
+              <Crown className="h-3 w-3" />
+              Pro
+            </Badge>
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Upgrade to Pro to unlock {label}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+const colorOptions = [
+  { value: '', label: 'Default' },
+  { value: '1', label: 'Lavender' },
+  { value: '2', label: 'Sage' },
+  { value: '3', label: 'Grape' },
+  { value: '4', label: 'Flamingo' },
+  { value: '5', label: 'Banana' },
+  { value: '6', label: 'Tangerine' },
+  { value: '7', label: 'Peacock' },
+  { value: '8', label: 'Graphite' },
+  { value: '9', label: 'Blueberry' },
+  { value: '10', label: 'Basil' },
+  { value: '11', label: 'Tomato' },
+];
 
 export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
   const { has_access, is_paid, tier } = subscriptionData;
@@ -31,17 +92,8 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
 
-  // Settings state - load from actual preferences
-  const [preferences, setPreferences] = useState<{
-    calendar: {
-      included_courses: string[];
-      color_coding_enabled: boolean;
-      course_colors: Record<string, string>;
-    };
-    tasks: {
-      included_courses: string[];
-    };
-  } | null>(null);
+  // Full preferences state matching SyncPreferences
+  const [preferences, setPreferences] = useState<SyncPreferences | null>(null);
 
   // Load preferences and courses
   useEffect(() => {
@@ -49,16 +101,7 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
       try {
         // Load preferences
         const prefsResponse = await user.getPreferences();
-        setPreferences({
-          calendar: {
-            included_courses: prefsResponse.preferences.calendar.included_courses || [],
-            color_coding_enabled: prefsResponse.preferences.calendar.color_coding_enabled || false,
-            course_colors: prefsResponse.preferences.calendar.course_colors || {},
-          },
-          tasks: {
-            included_courses: prefsResponse.preferences.tasks.included_courses || [],
-          },
-        });
+        setPreferences(prefsResponse.preferences);
 
         // Fetch Canvas metadata for course list
         setLoadingCourses(true);
@@ -115,6 +158,24 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
     loadLastSynced();
   }, []);
 
+  // Debounce timer for text inputs
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Immediate save for toggles/selects
+  const savePreferences = useCallback((updated: SyncPreferences) => {
+    user.updatePreferences(updated).catch(console.error);
+  }, []);
+
+  // Debounced save for text inputs (prevents focus loss)
+  const debouncedSave = useCallback((updated: SyncPreferences) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      user.updatePreferences(updated).catch(console.error);
+    }, 500);
+  }, []);
+
   const handleSync = async () => {
     setIsSyncing(true);
     try {
@@ -134,7 +195,6 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
       const response = await chrome.runtime.sendMessage({ type: 'CREATE_CHECKOUT_SESSION' });
 
       if (response.success && response.data?.checkout_url) {
-        // Open Stripe Checkout in new tab
         window.open(response.data.checkout_url, '_blank');
       } else {
         console.error('[C2C] Failed to create checkout:', response.error);
@@ -155,29 +215,35 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (hours > 0) {
-      return `${hours}h ${minutes}m ago`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ago`;
-    }
+    if (hours > 0) return `${hours}h ${minutes}m ago`;
+    if (minutes > 0) return `${minutes}m ago`;
     return 'Just now';
   };
 
-  const toggleCourse = (courseCode: string, section: 'calendar' | 'tasks', include: boolean) => {
+  // Event type toggles
+  const toggleEventType = (section: 'calendar' | 'tasks', eventType: CanvasEventType, include: boolean) => {
     if (!preferences) return;
 
-    const currentIncluded = preferences[section]?.included_courses || [];
+    const currentTypes = preferences[section].event_types || [];
+    const newTypes = include ? [...currentTypes, eventType] : currentTypes.filter(t => t !== eventType);
+
+    const updated = {
+      ...preferences,
+      [section]: { ...preferences[section], event_types: newTypes },
+    };
+    setPreferences(updated);
+    savePreferences(updated);
+  };
+
+  // Course toggles
+  const toggleCourse = (section: 'calendar' | 'tasks', courseCode: string, include: boolean) => {
+    if (!preferences) return;
+
+    const currentIncluded = preferences[section].included_courses || [];
     let newIncluded: string[];
 
     if (include) {
-      if (currentIncluded.length === 0) {
-        newIncluded = [courseCode];
-      } else if (!currentIncluded.includes(courseCode)) {
-        newIncluded = [...currentIncluded, courseCode];
-      } else {
-        newIncluded = currentIncluded;
-      }
+      newIncluded = currentIncluded.includes(courseCode) ? currentIncluded : [...currentIncluded, courseCode];
     } else {
       const explicitIncluded = currentIncluded.length === 0 ? [...allCourses] : [...currentIncluded];
       newIncluded = explicitIncluded.filter(c => c !== courseCode);
@@ -185,42 +251,19 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
 
     const updated = {
       ...preferences,
-      [section]: {
-        ...preferences[section],
-        included_courses: newIncluded,
-      },
+      [section]: { ...preferences[section], included_courses: newIncluded },
     };
     setPreferences(updated);
-
-    // Save to background
-    user
-      .updatePreferences({
-        calendar: {
-          ...updated.calendar,
-          event_types: [],
-        },
-        tasks: {
-          ...updated.tasks,
-          event_types: [],
-          task_organization: 'per_course',
-          task_list_naming: 'code',
-        },
-        sync: { auto_sync_enabled: false, auto_sync_interval_hours: 6 },
-        data_management: {
-          date_range: { past_days: 0, future_days: 365 },
-          auto_archive_completed_tasks: false,
-        },
-        course_display_names: {},
-      })
-      .catch(console.error);
+    savePreferences(updated);
   };
 
-  const isCourseSynced = (courseCode: string, section: 'calendar' | 'tasks'): boolean => {
+  const isCourseSynced = (section: 'calendar' | 'tasks', courseCode: string): boolean => {
     if (!preferences) return false;
-    const included = preferences[section]?.included_courses || [];
-    return included.includes(courseCode);
+    const included = preferences[section].included_courses || [];
+    return included.length === 0 || included.includes(courseCode);
   };
 
+  // Color coding
   const updateCourseColor = (courseCode: string, colorId: string) => {
     if (!preferences) return;
 
@@ -233,57 +276,61 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
 
     const updated = {
       ...preferences,
-      calendar: {
-        ...preferences.calendar,
-        course_colors: newColors,
+      calendar: { ...preferences.calendar, course_colors: newColors },
+    };
+    setPreferences(updated);
+    savePreferences(updated);
+  };
+
+  // Custom names - uses debounced save to prevent focus loss while typing
+  const updateCourseName = (courseCode: string, customName: string) => {
+    if (!preferences) return;
+
+    const newNames = { ...preferences.course_display_names };
+    if (customName) {
+      newNames[courseCode] = customName;
+    } else {
+      delete newNames[courseCode];
+    }
+
+    const updated = { ...preferences, course_display_names: newNames };
+    setPreferences(updated);
+    debouncedSave(updated); // Debounced to prevent focus loss
+  };
+
+  // Task settings
+  const updateTaskOrganization = (value: 'per_course' | 'consolidated') => {
+    if (!preferences) return;
+    const updated = { ...preferences, tasks: { ...preferences.tasks, task_organization: value } };
+    setPreferences(updated);
+    savePreferences(updated);
+  };
+
+  const updateTaskListNaming = (value: 'code' | 'name' | 'combined') => {
+    if (!preferences) return;
+    const updated = { ...preferences, tasks: { ...preferences.tasks, task_list_naming: value } };
+    setPreferences(updated);
+    savePreferences(updated);
+  };
+
+  // Date range
+  const updateDateRange = (field: 'past_days' | 'future_days', value: number) => {
+    if (!preferences) return;
+    const updated = {
+      ...preferences,
+      data_management: {
+        ...preferences.data_management,
+        date_range: {
+          ...preferences.data_management?.date_range,
+          past_days: preferences.data_management?.date_range?.past_days || 0,
+          future_days: preferences.data_management?.date_range?.future_days || 365,
+          [field]: value,
+        },
+        auto_archive_completed_tasks: preferences.data_management?.auto_archive_completed_tasks || false,
       },
     };
     setPreferences(updated);
-
-    // Save to background
-    user
-      .updatePreferences({
-        calendar: {
-          ...updated.calendar,
-          event_types: [],
-        },
-        tasks: {
-          ...updated.tasks,
-          event_types: [],
-          task_organization: 'per_course',
-          task_list_naming: 'code',
-        },
-        sync: { auto_sync_enabled: false, auto_sync_interval_hours: 6 },
-        data_management: {
-          date_range: { past_days: 0, future_days: 365 },
-          auto_archive_completed_tasks: false,
-        },
-        course_display_names: {},
-      })
-      .catch(console.error);
-  };
-
-  const FeatureGate = ({ children, locked, label }: { children: React.ReactNode; locked: boolean; label: string }) => {
-    if (!locked) return <>{children}</>;
-
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="relative">
-            <div className="pointer-events-none opacity-50">{children}</div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <Badge variant="secondary" className="gap-1">
-                <Crown className="h-3 w-3" />
-                Pro
-              </Badge>
-            </div>
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Upgrade to Pro to unlock {label}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
+    savePreferences(updated);
   };
 
   return (
@@ -305,210 +352,328 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
         </Button>
       </div>
 
-      {/* Two Column Layout */}
-      <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left Column: Sync Settings */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Settings2 className="h-5 w-5" />
-                <CardTitle className="text-lg">Sync Settings</CardTitle>
-              </div>
-              <CardDescription>Configure what gets synced to your Google Calendar</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Calendar Events</p>
-                  <p className="text-muted-foreground text-sm">Sync classes and events</p>
+      {/* Accordion Layout */}
+      <Accordion type="multiple" defaultValue={['calendar', 'tasks']} className="flex-1 space-y-4">
+        {/* Calendar Settings */}
+        <AccordionItem value="calendar" className="rounded-lg border">
+          <AccordionTrigger className="px-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              <span className="font-semibold">Calendar Settings</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            <div className="space-y-4">
+              {/* Event Types */}
+              <div>
+                <h4 className="mb-2 text-sm font-medium">Event Types to Sync</h4>
+                <div className="flex flex-wrap gap-4">
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={preferences?.calendar.event_types.includes('assignment')}
+                      onCheckedChange={checked => toggleEventType('calendar', 'assignment', !!checked)}
+                    />
+                    <span className="text-sm">Assignments</span>
+                  </label>
+                  {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      checked={preferences?.calendar.event_types.includes('event')}
+                      onCheckedChange={checked => toggleEventType('calendar', 'event', !!checked)}
+                    />
+                    <span className="text-sm">Events</span>
+                  </label>
                 </div>
-                <Switch
-                  checked={preferences?.calendar.included_courses.length ? true : false}
-                  onCheckedChange={() => {}}
-                />
               </div>
 
               <Separator />
 
-              <FeatureGate locked={!canAccessProFeatures} label="task syncing">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Tasks</p>
-                    <p className="text-muted-foreground text-sm">Sync assignments to Google Tasks</p>
-                  </div>
-                  <Switch
-                    checked={preferences?.tasks.included_courses.length ? true : false}
-                    onCheckedChange={() => {}}
-                    disabled={!canAccessProFeatures}
-                  />
-                </div>
-              </FeatureGate>
-            </CardContent>
-          </Card>
-
-          {/* Course Selection - Pro Feature */}
-          <FeatureGate locked={!canAccessProFeatures} label="course selection">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Course Selection</CardTitle>
-                <CardDescription>Choose which courses to sync to calendar</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingCourses ? (
-                  <p className="text-muted-foreground text-sm">Loading courses...</p>
-                ) : allCourses.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No courses found. Please sync first.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {allCourses.map(courseCode => (
-                      <div key={courseCode} className="flex items-center justify-between">
-                        <label className="flex cursor-pointer items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isCourseSynced(courseCode, 'calendar')}
-                            onChange={e => toggleCourse(courseCode, 'calendar', e.target.checked)}
-                            className="h-4 w-4"
+              {/* Course Selection */}
+              <FeatureGate locked={!canAccessProFeatures} label="course selection">
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Courses to Sync</h4>
+                  {loadingCourses ? (
+                    <p className="text-muted-foreground text-sm">Loading courses...</p>
+                  ) : allCourses.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No courses found. Sync first to detect courses.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {allCourses.map(courseCode => (
+                        <label key={courseCode} className="flex cursor-pointer items-center gap-2">
+                          <Checkbox
+                            checked={isCourseSynced('calendar', courseCode)}
+                            onCheckedChange={checked => toggleCourse('calendar', courseCode, !!checked)}
                           />
                           <span className="text-sm">{courseCode}</span>
                         </label>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </FeatureGate>
-        </div>
-
-        {/* Right Column: Visual Settings */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Palette className="h-5 w-5" />
-                <CardTitle className="text-lg">Visual Settings</CardTitle>
-              </div>
-              <CardDescription>Customize how events appear in your calendar</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FeatureGate locked={!canAccessProFeatures} label="custom colors">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Custom Colors</p>
-                    <p className="text-muted-foreground text-sm">Color-code events by course</p>
-                  </div>
-                  <Switch
-                    checked={preferences?.calendar.color_coding_enabled || false}
-                    onCheckedChange={checked => {
-                      if (!preferences) return;
-                      const updated = {
-                        ...preferences,
-                        calendar: { ...preferences.calendar, color_coding_enabled: checked },
-                      };
-                      setPreferences(updated);
-                      user
-                        .updatePreferences({
-                          calendar: { ...updated.calendar, event_types: [] },
-                          tasks: {
-                            ...updated.tasks,
-                            event_types: [],
-                            task_organization: 'per_course',
-                            task_list_naming: 'code',
-                          },
-                          sync: { auto_sync_enabled: false, auto_sync_interval_hours: 6 },
-                          data_management: { date_range: { past_days: 0, future_days: 365 } },
-                          course_display_names: {},
-                        })
-                        .catch(console.error);
-                    }}
-                    disabled={!canAccessProFeatures}
-                  />
+                      ))}
+                    </div>
+                  )}
                 </div>
               </FeatureGate>
-
-              {preferences?.calendar.color_coding_enabled && allCourses.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  <p className="text-sm font-medium">Course Colors</p>
-                  {allCourses.map(courseCode => {
-                    const colorId = preferences.calendar.course_colors[courseCode] || '';
-                    return (
-                      <div key={courseCode} className="flex items-center justify-between gap-2">
-                        <span className="text-sm">{courseCode}</span>
-                        <select
-                          value={colorId}
-                          onChange={e => updateCourseColor(courseCode, e.target.value)}
-                          className="rounded border px-2 py-1 text-sm">
-                          <option value="">Default</option>
-                          <option value="1">Lavender</option>
-                          <option value="2">Sage</option>
-                          <option value="3">Grape</option>
-                          <option value="4">Flamingo</option>
-                          <option value="5">Banana</option>
-                          <option value="6">Tangerine</option>
-                          <option value="7">Peacock</option>
-                          <option value="8">Graphite</option>
-                          <option value="9">Blueberry</option>
-                          <option value="10">Basil</option>
-                          <option value="11">Tomato</option>
-                        </select>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
 
               <Separator />
 
-              <FeatureGate locked={!canAccessProFeatures} label="custom naming">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Custom Naming</p>
-                    <p className="text-muted-foreground text-sm">Rename courses for clarity</p>
+              {/* Color Coding */}
+              <FeatureGate locked={!canAccessProFeatures} label="custom colors">
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h4 className="text-sm font-medium">Color Coding</h4>
+                    <Switch
+                      checked={preferences?.calendar.color_coding_enabled || false}
+                      onCheckedChange={checked => {
+                        if (!preferences) return;
+                        const updated = {
+                          ...preferences,
+                          calendar: { ...preferences.calendar, color_coding_enabled: checked },
+                        };
+                        setPreferences(updated);
+                        savePreferences(updated);
+                      }}
+                    />
                   </div>
-                  <Switch checked={false} onCheckedChange={() => {}} disabled={!canAccessProFeatures} />
+                  {preferences?.calendar.color_coding_enabled && allCourses.length > 0 && (
+                    <div className="space-y-2">
+                      {allCourses.map(courseCode => (
+                        <div key={courseCode} className="flex items-center justify-between gap-2">
+                          <span className="text-sm">{courseCode}</span>
+                          <Select
+                            value={preferences.calendar.course_colors[courseCode] || ''}
+                            onValueChange={value => updateCourseColor(courseCode, value)}>
+                            <SelectTrigger className="w-32">
+                              <SelectValue placeholder="Default" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {colorOptions.map(opt => (
+                                <SelectItem key={opt.value} value={opt.value || 'default'}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <p className="text-muted-foreground mt-2 text-xs">Custom naming available in full settings</p>
               </FeatureGate>
-            </CardContent>
-          </Card>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
 
-          {/* Upgrade Card */}
-          {!is_paid && (
-            <Card className="from-primary/5 to-primary/10 border-primary/20 bg-gradient-to-br">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Crown className="text-primary h-5 w-5" />
-                  <CardTitle className="text-lg">{has_access ? 'Upgrade to Pro' : 'Continue with Pro'}</CardTitle>
+        {/* Tasks Settings */}
+        <AccordionItem value="tasks" className="rounded-lg border">
+          <AccordionTrigger className="px-4">
+            <div className="flex items-center gap-2">
+              <ListTodo className="h-5 w-5" />
+              <span className="font-semibold">Tasks Settings</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            <FeatureGate locked={!canAccessProFeatures} label="task syncing">
+              <div className="space-y-4">
+                {/* Event Types */}
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Event Types to Sync</h4>
+                  <div className="flex flex-wrap gap-4">
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <Checkbox
+                        checked={preferences?.tasks.event_types.includes('assignment')}
+                        onCheckedChange={checked => toggleEventType('tasks', 'assignment', !!checked)}
+                      />
+                      <span className="text-sm">Assignments</span>
+                    </label>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <Checkbox
+                        checked={preferences?.tasks.event_types.includes('event')}
+                        onCheckedChange={checked => toggleEventType('tasks', 'event', !!checked)}
+                      />
+                      <span className="text-sm">Events</span>
+                    </label>
+                  </div>
                 </div>
-                <CardDescription>
-                  {has_access ? 'Unlock lifetime access for $20' : 'Your trial has ended — unlock to continue syncing'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="mb-4 space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <span className="text-primary">✓</span> Sync every 15 minutes
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-primary">✓</span> Custom colors & naming
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-primary">✓</span> Course selection
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="text-primary">✓</span> Task syncing
-                  </li>
-                </ul>
-                <Button className="w-full gap-2" onClick={handleUpgrade} disabled={isUpgrading}>
-                  <Crown className="h-4 w-4" />
-                  {isUpgrading ? 'Opening checkout...' : 'Upgrade Now'}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+
+                <Separator />
+
+                {/* Course Selection */}
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Courses to Sync</h4>
+                  {loadingCourses ? (
+                    <p className="text-muted-foreground text-sm">Loading courses...</p>
+                  ) : allCourses.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No courses found. Sync first to detect.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      {allCourses.map(courseCode => (
+                        <label key={courseCode} className="flex cursor-pointer items-center gap-2">
+                          <Checkbox
+                            checked={isCourseSynced('tasks', courseCode)}
+                            onCheckedChange={checked => toggleCourse('tasks', courseCode, !!checked)}
+                          />
+                          <span className="text-sm">{courseCode}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Task Organization */}
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Task Organization</h4>
+                  <RadioGroup
+                    value={preferences?.tasks.task_organization || 'per_course'}
+                    onValueChange={value => updateTaskOrganization(value as 'per_course' | 'consolidated')}>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <RadioGroupItem value="per_course" />
+                      <span className="text-sm">Separate list per course</span>
+                    </label>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <RadioGroupItem value="consolidated" />
+                      <span className="text-sm">Single consolidated list</span>
+                    </label>
+                  </RadioGroup>
+                </div>
+
+                <Separator />
+
+                {/* Task List Naming */}
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Task List Naming</h4>
+                  <RadioGroup
+                    value={preferences?.tasks.task_list_naming === 'code' ? 'code' : 'custom'}
+                    onValueChange={value => {
+                      if (value === 'code') {
+                        updateTaskListNaming('code');
+                      } else {
+                        // Default to 'name' when switching to custom
+                        updateTaskListNaming('name');
+                      }
+                    }}>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <RadioGroupItem value="code" />
+                      <span className="text-sm">Course code (e.g., "CS 101")</span>
+                    </label>
+                    {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <RadioGroupItem value="custom" />
+                      <span className="text-sm">Custom names</span>
+                    </label>
+                  </RadioGroup>
+                </div>
+
+                {/* Custom Course Names */}
+                {preferences?.tasks.task_list_naming !== 'code' && allCourses.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h4 className="mb-2 text-sm font-medium">Custom Course Names</h4>
+                      {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+                      <label className="mb-3 flex cursor-pointer items-center gap-2">
+                        <Checkbox
+                          checked={preferences?.tasks.task_list_naming === 'combined'}
+                          onCheckedChange={checked => {
+                            updateTaskListNaming(checked ? 'combined' : 'name');
+                          }}
+                        />
+                        <span className="text-sm">Include course code as prefix</span>
+                      </label>
+                      <div className="space-y-2">
+                        {allCourses.map(courseCode => (
+                          <div key={courseCode} className="flex items-center gap-2">
+                            <span className="w-20 text-sm">{courseCode}</span>
+                            <Input
+                              placeholder="Custom name..."
+                              value={preferences?.course_display_names?.[courseCode] || ''}
+                              onChange={e => updateCourseName(courseCode, e.target.value)}
+                              onKeyDown={e => e.stopPropagation()}
+                              className="flex-1"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </FeatureGate>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Advanced Settings */}
+        <AccordionItem value="advanced" className="rounded-lg border">
+          <AccordionTrigger className="px-4">
+            <div className="flex items-center gap-2">
+              <Sliders className="h-5 w-5" />
+              <span className="font-semibold">Advanced Settings</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
+            <FeatureGate locked={!canAccessProFeatures} label="advanced settings">
+              <div className="space-y-4">
+                {/* Date Range */}
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">Task Date Range</h4>
+                  <p className="text-muted-foreground mb-4 text-xs">
+                    Keep tasks from {preferences?.data_management?.date_range?.past_days || 0} days ago to{' '}
+                    {preferences?.data_management?.date_range?.future_days || 365} days ahead
+                  </p>
+                  <RangeSlider
+                    maxPast={50}
+                    maxFuture={150}
+                    pastDays={preferences?.data_management?.date_range?.past_days || 0}
+                    futureDays={preferences?.data_management?.date_range?.future_days || 14}
+                    onPastDaysChange={value => updateDateRange('past_days', value)}
+                    onFutureDaysChange={value => updateDateRange('future_days', value)}
+                  />
+                </div>
+              </div>
+            </FeatureGate>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+
+      {/* Upgrade Card */}
+      {!is_paid && (
+        <Card className="from-primary/5 to-primary/10 border-primary/20 mt-6 bg-gradient-to-br">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Crown className="text-primary h-5 w-5" />
+              <CardTitle className="text-lg">{has_access ? 'Upgrade to Pro' : 'Continue with Pro'}</CardTitle>
+            </div>
+            <CardDescription>
+              {has_access ? 'Unlock lifetime access for $20' : 'Your trial has ended — unlock to continue syncing'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="mb-4 grid grid-cols-2 gap-1 text-sm">
+              <li className="flex items-center gap-2">
+                <span className="text-primary">✓</span> Unlimited syncs
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-primary">✓</span> Custom colors
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-primary">✓</span> Course selection
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-primary">✓</span> Task syncing
+              </li>
+            </ul>
+            <Button className="w-full gap-2" onClick={handleUpgrade} disabled={isUpgrading}>
+              <Crown className="h-4 w-4" />
+              {isUpgrading ? 'Opening checkout...' : 'Upgrade Now'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

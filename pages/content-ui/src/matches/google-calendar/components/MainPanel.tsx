@@ -3,6 +3,7 @@ import { IcsUrlInput } from './IcsUrlInput';
 import { SettingsPanel } from './SettingsPanel';
 import { Button } from '@extension/ui';
 import { X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type { AppState } from '../App';
 import type { SubscriptionData } from './TrialBanner';
 
@@ -15,6 +16,47 @@ interface MainPanelProps {
 }
 
 export const MainPanel = ({ isOpen, onClose, appState, onStateChange, subscriptionData }: MainPanelProps) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Block keyboard events from propagating to Google Calendar
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || !isOpen) return;
+
+    const stopPropagation = (e: Event) => {
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+    };
+
+    // Attach in capture phase to intercept before Google Calendar
+    dialog.addEventListener('keydown', stopPropagation, true);
+    dialog.addEventListener('keyup', stopPropagation, true);
+    dialog.addEventListener('keypress', stopPropagation, true);
+
+    return () => {
+      dialog.removeEventListener('keydown', stopPropagation, true);
+      dialog.removeEventListener('keyup', stopPropagation, true);
+      dialog.removeEventListener('keypress', stopPropagation, true);
+    };
+  }, [isOpen]);
+
+  // React synthetic event handlers - in addition to native listeners
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    e.nativeEvent.stopImmediatePropagation();
+    if (e.key === 'Escape') onClose();
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    e.nativeEvent.stopImmediatePropagation();
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+    e.nativeEvent.stopImmediatePropagation();
+  };
+
   if (!isOpen) return null;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
@@ -35,13 +77,14 @@ export const MainPanel = ({ isOpen, onClose, appState, onStateChange, subscripti
 
       {/* Dialog Content - Even higher z-index */}
       <div
+        ref={dialogRef}
         className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
         onClick={handleBackdropClick}
         role="button"
         tabIndex={-1}
-        onKeyDown={e => {
-          if (e.key === 'Escape') onClose();
-        }}>
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
+        onKeyPress={handleKeyPress}>
         <div className="bg-background relative flex h-[calc(100vh-4rem)] max-h-[900px] w-[calc(100vw-4rem)] max-w-[1400px] flex-col overflow-hidden rounded-lg border shadow-lg">
           {/* Close Button */}
           <Button
