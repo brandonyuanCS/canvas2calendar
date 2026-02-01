@@ -31,3 +31,24 @@
 * {
   border-color: hsl(var(--border));
 }
+
+/* Explicit utility classes for shadow DOM - Tailwind's @layer doesn't always work in shadow DOM */
+.bg-background {
+  background-color: hsl(var(--background)) !important;
+}
+
+.bg-primary {
+  background-color: hsl(var(--primary)) !important;
+}
+
+.text-primary-foreground {
+  color: hsl(var(--primary-foreground)) !important;
+}
+
+.text-muted-foreground {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.bg-border {
+  background-color: hsl(var(--border)) !important;
+}

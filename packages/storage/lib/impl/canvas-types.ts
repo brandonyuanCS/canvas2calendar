@@ -18,13 +18,15 @@ export interface UserDataState {
   // Supabase integration
   supabase_user_id?: string;
   subscription_tier: 'free' | 'pro' | 'max';
-  subscription_status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  subscription_status?: 'active' | 'canceled' | 'past_due' | 'trialing'; // Legacy field, optional
   // Canvas data
   canvas_ics_feed_url?: string;
-  preferences: SyncPreferences;
+  preferences?: SyncPreferences;
+  // If preferences is undefined, use DEFAULT_PREFERENCES
+  // For tracking preference sync state:
   last_synced_preferences?: SyncPreferences;
-  created_at: string;
-  updated_at: string;
+  created_at: string; // ISO 8601
+  updated_at: string; // ISO 8601
 }
 
 // ============= Calendar Data =============
@@ -103,8 +105,12 @@ export interface TasksMapState {
 // ============= Subscription Cache =============
 
 export interface SubscriptionCacheState {
+  has_access: boolean;
   tier: 'free' | 'pro' | 'max';
-  status: 'active' | 'canceled' | 'past_due' | 'trialing';
-  is_premium: boolean;
+  is_trial: boolean;
+  is_paid: boolean;
+  trial_days_remaining?: number;
+  trial_expires_at?: string;
+  reason?: string;
   cached_at: number; // Unix timestamp in ms
 }

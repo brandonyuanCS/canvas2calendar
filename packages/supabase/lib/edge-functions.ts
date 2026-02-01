@@ -18,14 +18,20 @@ interface UserResponse {
   id: string;
   google_user_id: string;
   email: string;
+  trial_started_at: string;
+  payment_status: 'unpaid' | 'paid' | 'refunded';
   subscription_tier: 'free' | 'pro' | 'max';
-  subscription_status: 'active' | 'canceled' | 'past_due' | 'trialing';
+  deleted_at?: string | null;
 }
 
 interface SubscriptionResponse {
+  has_access: boolean;
   tier: 'free' | 'pro' | 'max';
-  status: 'active' | 'canceled' | 'past_due' | 'trialing';
-  is_premium: boolean;
+  is_trial: boolean;
+  is_paid: boolean;
+  trial_expires_at?: string;
+  trial_days_remaining?: number;
+  reason?: string;
 }
 
 interface CheckoutParams {
@@ -71,8 +77,14 @@ export const getOrCreateUser = async (params: GetOrCreateUserParams): Promise<Us
  */
 export const checkSubscription = async (googleUserId: string): Promise<SubscriptionResponse> => {
   if (!SUPABASE_URL) {
-    // Return free tier if Supabase not configured
-    return { tier: 'free', status: 'active', is_premium: false };
+    // Return active trial if Supabase not configured (dev mode)
+    return {
+      has_access: true,
+      tier: 'free',
+      is_trial: true,
+      is_paid: false,
+      trial_days_remaining: 14,
+    };
   }
 
   try {
@@ -86,14 +98,14 @@ export const checkSubscription = async (googleUserId: string): Promise<Subscript
     });
 
     if (!response.ok) {
-      console.warn('[Supabase] Subscription check failed, defaulting to free');
-      return { tier: 'free', status: 'active', is_premium: false };
+      console.warn('[Supabase] Subscription check failed, defaulting to trial active');
+      return { has_access: true, tier: 'free', is_trial: true, is_paid: false };
     }
 
     return response.json();
   } catch (error) {
-    console.warn('[Supabase] Subscription check error, defaulting to free:', error);
-    return { tier: 'free', status: 'active', is_premium: false };
+    console.warn('[Supabase] Subscription check error, defaulting to trial active:', error);
+    return { has_access: true, tier: 'free', is_trial: true, is_paid: false };
   }
 };
 

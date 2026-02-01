@@ -9,10 +9,20 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL,
   name TEXT,
   picture TEXT,
+  
+  -- Trial tracking (server-authoritative, set once on creation)
+  trial_started_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+  
+  -- Payment tracking for one-time payment model
+  payment_status TEXT DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'paid', 'refunded')),
   subscription_tier TEXT DEFAULT 'free' CHECK (subscription_tier IN ('free', 'pro', 'max')),
-  subscription_status TEXT DEFAULT 'active' CHECK (subscription_status IN ('active', 'canceled', 'past_due', 'trialing')),
+  
+  -- Stripe integration
   stripe_customer_id TEXT,
-  stripe_subscription_id TEXT,
+  
+  -- Soft delete for anti-abuse (prevents delete & re-register)
+  deleted_at TIMESTAMPTZ,
+  
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

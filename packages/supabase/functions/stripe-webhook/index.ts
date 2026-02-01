@@ -45,12 +45,12 @@ serve(async (req: Request) => {
           if (googleUserId) {
             console.log(`Upgrading user ${googleUserId} to Pro`);
 
-            // Update user to Pro tier
+            // Update user to Pro tier with paid status
             const { error } = await supabase
               .from('users')
               .update({
+                payment_status: 'paid',
                 subscription_tier: 'pro',
-                subscription_status: 'active',
                 stripe_customer_id: session.customer as string,
                 updated_at: new Date().toISOString(),
               })
@@ -81,26 +81,26 @@ serve(async (req: Request) => {
         break;
       }
 
-      // Handle refunds - downgrade user back to free
+      // Handle refunds - mark payment as refunded (user may still have trial access)
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
         const customerId = charge.customer as string;
 
         if (customerId) {
-          // Find user by stripe_customer_id and downgrade
+          // Find user by stripe_customer_id and update payment status
           const { error } = await supabase
             .from('users')
             .update({
+              payment_status: 'refunded',
               subscription_tier: 'free',
-              subscription_status: 'canceled',
               updated_at: new Date().toISOString(),
             })
             .eq('stripe_customer_id', customerId);
 
           if (error) {
-            console.error('Failed to downgrade user after refund:', error);
+            console.error('Failed to update user after refund:', error);
           } else {
-            console.log('User downgraded after refund');
+            console.log('User payment status updated to refunded');
           }
         }
         break;

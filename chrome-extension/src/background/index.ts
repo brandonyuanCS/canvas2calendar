@@ -184,8 +184,6 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
         // Default subscription values
         let subscriptionTier: 'free' | 'pro' | 'max' = existingUser?.subscription_tier || 'free';
-        let subscriptionStatus: 'active' | 'canceled' | 'past_due' | 'trialing' =
-          existingUser?.subscription_status || 'active';
 
         // Create or get user via Edge Function (secure, server-side)
         if (isEdgeFunctionsConfigured()) {
@@ -197,7 +195,6 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
               picture: userInfo.picture,
             });
             subscriptionTier = userResponse.subscription_tier;
-            subscriptionStatus = userResponse.subscription_status;
             console.log('[Canvas2Calendar] User synced via Edge Function, tier:', subscriptionTier);
           } catch (error) {
             console.warn('[Canvas2Calendar] Could not sync user via Edge Function:', error);
@@ -216,7 +213,6 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           // Supabase integration
           supabase_user_id: existingUser?.supabase_user_id,
           subscription_tier: subscriptionTier,
-          subscription_status: subscriptionStatus,
           // Only set defaults if not already set
           preferences: existingUser?.preferences || DEFAULT_PREFERENCES,
           created_at: existingUser?.created_at || now,
@@ -276,13 +272,10 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         // Check cache first (5 minute TTL)
         const cached = await getCachedSubscription();
         if (cached) {
-          console.log('[Canvas2Calendar] Using cached subscription:', cached.tier);
+          console.log('[Canvas2Calendar] Using cached subscription:', cached);
           return {
             success: true,
-            data: {
-              tier: cached.tier,
-              status: cached.status,
-            },
+            data: cached,
           };
         }
 
@@ -290,39 +283,35 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         if (isEdgeFunctionsConfigured() && user.google_user_id) {
           try {
             const subscription = await checkSubscription(user.google_user_id);
-            console.log('[Canvas2Calendar] Fetched subscription from Edge Function:', subscription.tier);
+            console.log('[Canvas2Calendar] Fetched subscription from Edge Function:', subscription);
 
-            // Cache the result
-            await setCachedSubscription({
-              tier: subscription.tier,
-              status: subscription.status,
-              is_premium: subscription.is_premium,
-            });
+            // Cache the FULL result (including trial info)
+            await setCachedSubscription(subscription);
 
-            // Also update user storage
+            // Also update user storage with tier
             await userStorage.set({
               ...user,
               subscription_tier: subscription.tier,
-              subscription_status: subscription.status,
             });
 
             return {
               success: true,
-              data: {
-                tier: subscription.tier,
-                status: subscription.status,
-              },
+              data: subscription,
             };
           } catch {
             // Fall back to cached value in user storage
           }
         }
 
+        // Fallback: default to active trial
         return {
           success: true,
           data: {
-            tier: user.subscription_tier || 'free',
-            status: user.subscription_status || 'active',
+            has_access: true,
+            tier: (user.subscription_tier || 'free') as 'free' | 'pro' | 'max',
+            is_trial: true,
+            is_paid: false,
+            trial_days_remaining: 14,
           },
         };
       } catch (error) {
@@ -352,6 +341,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           isAuthenticated: !!user?.google_user_id,
           hasCalendar: !!calendar?.google_calendar_id,
           hasIcsUrl: !!user?.canvas_ics_feed_url,
+          subscription_tier: user?.subscription_tier || 'free',
           ...syncState,
         },
       };
