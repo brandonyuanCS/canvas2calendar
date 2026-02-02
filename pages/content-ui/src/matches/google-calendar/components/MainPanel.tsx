@@ -2,9 +2,9 @@ import { AuthPrompt } from './AuthPrompt';
 import { IcsUrlInput } from './IcsUrlInput';
 import { SettingsPanel } from './SettingsPanel';
 import { Button } from '@extension/ui';
-import { X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import type { AppState } from '../App';
+import { X, LogOut, User } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import type { AppState, UserData } from '../App';
 import type { SubscriptionData } from './TrialBanner';
 
 interface MainPanelProps {
@@ -13,10 +13,21 @@ interface MainPanelProps {
   appState: AppState;
   onStateChange: (state: AppState) => void;
   subscriptionData: SubscriptionData;
+  userData: UserData | null;
+  onSignOut: () => void;
 }
 
-export const MainPanel = ({ isOpen, onClose, appState, onStateChange, subscriptionData }: MainPanelProps) => {
+export const MainPanel = ({
+  isOpen,
+  onClose,
+  appState,
+  onStateChange,
+  subscriptionData,
+  userData,
+  onSignOut,
+}: MainPanelProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   // Block keyboard events from propagating to Google Calendar
   useEffect(() => {
@@ -96,15 +107,53 @@ export const MainPanel = ({ isOpen, onClose, appState, onStateChange, subscripti
           </Button>
 
           {/* Header */}
-          <div className="flex-shrink-0 px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-primary flex h-8 w-8 items-center justify-center rounded-lg">
-                <span className="text-primary-foreground text-sm font-bold">C2C</span>
+          <div className="flex-shrink-0 px-6 py-4 pr-14">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-primary flex h-8 w-8 items-center justify-center rounded-lg">
+                  <span className="text-primary-foreground text-sm font-bold">C2C</span>
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold">Class2Calendar</h1>
+                  <p className="text-muted-foreground text-sm">Sync your Canvas calendar to Google</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-semibold">Class2Calendar</h1>
-                <p className="text-muted-foreground text-sm">Sync your Canvas calendar to Google</p>
-              </div>
+
+              {/* User Profile Section */}
+              {userData && appState !== 'SIGNED_OUT' && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSigningOut}
+                    onClick={async () => {
+                      setIsSigningOut(true);
+                      try {
+                        await chrome.runtime.sendMessage({ type: 'SIGN_OUT' });
+                        onSignOut();
+                        onClose();
+                      } finally {
+                        setIsSigningOut(false);
+                      }
+                    }}
+                    className="text-muted-foreground hover:text-foreground">
+                    <LogOut className="mr-1.5 h-4 w-4" />
+                    {isSigningOut ? 'Signing out...' : 'Sign out'}
+                  </Button>
+                  {userData.picture ? (
+                    <img
+                      src={userData.picture}
+                      alt={userData.name || 'User'}
+                      className="h-8 w-8 rounded-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full">
+                      <User className="h-4 w-4" />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

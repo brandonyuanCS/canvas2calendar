@@ -1,5 +1,5 @@
 import { TrialBanner } from './TrialBanner';
-import { sync, user } from '@extension/shared';
+import { sync, user, auth } from '@extension/shared';
 import {
   Button,
   Card,
@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@extension/ui';
-import { RefreshCw, Clock, Calendar, ListTodo, Crown, Sliders } from 'lucide-react';
+import { RefreshCw, Clock, Calendar, ListTodo, Crown, Sliders, LogOut } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SubscriptionData } from './TrialBanner';
 import type { SyncPreferences, CanvasEventType } from '@extension/shared';
@@ -84,8 +84,10 @@ const colorOptions = [
 ];
 
 export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
-  const { has_access, is_paid, tier } = subscriptionData;
-  const canAccessProFeatures = has_access && (is_paid || tier === 'pro' || tier === 'max');
+  const { has_access, is_paid } = subscriptionData;
+  // During trial (has_access=true), users get FULL access to all features
+  // Features are only locked when has_access=false (trial expired and not paid)
+  const canAccessProFeatures = has_access;
   const [allCourses, setAllCourses] = useState<string[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
@@ -674,6 +676,24 @@ export const SettingsPanel = ({ subscriptionData }: SettingsPanelProps) => {
           </CardContent>
         </Card>
       )}
+
+      {/* Sign Out Button */}
+      <div className="mt-6 flex justify-center border-t pt-4">
+        <Button
+          variant="ghost"
+          className="text-muted-foreground hover:text-destructive gap-2"
+          onClick={async () => {
+            try {
+              await auth.signOut();
+              window.location.reload();
+            } catch (error) {
+              console.error('[C2C] Sign out failed:', error);
+            }
+          }}>
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </Button>
+      </div>
     </div>
   );
 };

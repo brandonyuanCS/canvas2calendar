@@ -114,3 +114,10 @@ export interface SubscriptionCacheState {
   reason?: string;
   cached_at: number; // Unix timestamp in ms
 }
+
+// ============= Active Account =============
+
+export interface ActiveAccountState {
+  googleUserId: string;
+  email: string;
+}

@@ -6,9 +6,16 @@ import type { SubscriptionData } from './components/TrialBanner';
 
 export type AppState = 'LOADING' | 'SIGNED_OUT' | 'NEEDS_ICS' | 'READY';
 
+export interface UserData {
+  name?: string;
+  email?: string;
+  picture?: string;
+}
+
 export default function App() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [appState, setAppState] = useState<AppState>('LOADING');
+  const [userData, setUserData] = useState<UserData | null>(null);
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({
     has_access: true,
     tier: 'free',
@@ -47,6 +54,16 @@ export default function App() {
       const subResponse = await chrome.runtime.sendMessage({ type: 'GET_SUBSCRIPTION' });
       if (subResponse.success && subResponse.data) {
         setSubscriptionData(subResponse.data);
+      }
+
+      // Fetch user data for profile display
+      const userResponse = await chrome.runtime.sendMessage({ type: 'GET_USER' });
+      if (userResponse.success && userResponse.data) {
+        setUserData({
+          name: userResponse.data.name,
+          email: userResponse.data.email,
+          picture: userResponse.data.picture,
+        });
       }
 
       if (!status.hasIcsUrl) {
@@ -94,6 +111,11 @@ export default function App() {
         appState={appState}
         onStateChange={handleStateChange}
         subscriptionData={subscriptionData}
+        userData={userData}
+        onSignOut={() => {
+          setUserData(null);
+          setAppState('SIGNED_OUT');
+        }}
       />
     </TooltipProvider>
   );

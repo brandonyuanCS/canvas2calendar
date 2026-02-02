@@ -1,0 +1,9 @@
+frontend working now
+stuff todo:
+- validate existing functionality
+- after that, add color coding
+
+after functionality seems good:
+- start preparing for oauth submission (maybe we can do this before the end of the weekend??)
+- gonna have to host a privacy policy on vercel...
+  - after we release, we can buy domain and make actual website

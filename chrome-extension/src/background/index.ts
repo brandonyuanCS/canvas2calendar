@@ -21,16 +21,13 @@ import {
 import { icsParser, validateCanvasUrl } from '@extension/ics-parser';
 import { DEFAULT_PREFERENCES } from '@extension/shared';
 import {
-  userStorage,
-  calendarStorage,
-  syncStateStorage,
-  eventsStorage,
-  taskListsStorage,
-  tasksStorage,
-  clearAllCanvas2CalData,
-  getCachedSubscription,
-  setCachedSubscription,
-  clearSubscriptionCache,
+  // Multi-account storage
+  activeAccountStorage,
+  getAccountStorage,
+  migrateToUserScopedStorage,
+  getCachedSubscriptionForUser,
+  setCachedSubscriptionForUser,
+  clearSubscriptionCacheForUser,
 } from '@extension/storage';
 import {
   signOut as supabaseSignOut,
@@ -40,7 +37,7 @@ import {
   isEdgeFunctionsConfigured,
 } from '@extension/supabase';
 import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport, TaskListNaming } from '@extension/shared';
-import type { CalendarDataState } from '@extension/storage';
+import type { CalendarDataState, AccountStorage } from '@extension/storage';
 
 // ============= Constants =============
 
@@ -110,13 +107,43 @@ const formatCalendarEventSummary = (summary: string, courseCode?: string): strin
   return `${summary} (${formattedCode})`;
 };
 
+// ============= Multi-Account Storage Helpers =============
+
+/**
+ * Get the current active account's user ID
+ * @throws Error if no account is signed in
+ */
+const getActiveUserId = async (): Promise<string> => {
+  const activeAccount = await activeAccountStorage.get();
+  if (!activeAccount) {
+    throw new Error('No active account');
+  }
+  return activeAccount.googleUserId;
+};
+
+/**
+ * Get storage for the current active account
+ * @throws Error if no account is signed in
+ */
+const getCurrentAccountStorage = async (): Promise<AccountStorage> => {
+  const userId = await getActiveUserId();
+  return getAccountStorage(userId);
+};
+
 // ============= Initialization =============
 
 console.log('[Canvas2Calendar] Background service worker loaded');
 
-// Set up alarm on install
+// Set up alarm on install and run migrations
 chrome.runtime.onInstalled.addListener(async details => {
   console.log(`[Canvas2Calendar] Extension ${details.reason}:`, details);
+
+  // Run migration for existing users (converts flat-key storage to user-scoped)
+  try {
+    await migrateToUserScopedStorage();
+  } catch (error) {
+    console.error('[Canvas2Calendar] Migration error:', error);
+  }
 
   if (details.reason === 'install') {
     await setupSyncAlarm(DEFAULT_SYNC_INTERVAL_MINUTES);
@@ -131,7 +158,15 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   console.log('[Canvas2Calendar] Sync alarm triggered');
 
   try {
-    const user = await userStorage.get();
+    // Check if there's an active account
+    const activeAccount = await activeAccountStorage.get();
+    if (!activeAccount) {
+      console.log('[Canvas2Calendar] No active account, skipping sync');
+      return;
+    }
+
+    const storage = await getCurrentAccountStorage();
+    const user = await storage.user.get();
     if (!user?.canvas_ics_feed_url) {
       console.log('[Canvas2Calendar] No ICS URL configured, skipping sync');
       return;
@@ -179,8 +214,17 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
         const now = new Date().toISOString();
 
+        // Set this as the active account FIRST
+        await activeAccountStorage.set({
+          googleUserId: userInfo.id,
+          email: userInfo.email,
+        });
+
+        // Get user-scoped storage for this account
+        const storage = getAccountStorage(userInfo.id);
+
         // Get existing user data to merge (preserves ICS URL, preferences, etc.)
-        const existingUser = await userStorage.get();
+        const existingUser = await storage.user.get();
 
         // Default subscription values
         let subscriptionTier: 'free' | 'pro' | 'max' = existingUser?.subscription_tier || 'free';
@@ -202,7 +246,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           }
         }
 
-        await userStorage.set({
+        await storage.user.set({
           // Preserve existing data
           ...existingUser,
           // Update with new auth info
@@ -245,32 +289,32 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         // Ignore Supabase sign out errors
       }
 
-      // Clear the google_user_id but preserve other user data (ICS URL, preferences)
-      const existingUser = await userStorage.get();
-      if (existingUser) {
-        await userStorage.set({
-          ...existingUser,
-          google_user_id: '', // Mark as not authenticated
-          supabase_user_id: undefined,
-          updated_at: new Date().toISOString(),
-        });
+      // Get current user ID before clearing active account
+      const activeAccount = await activeAccountStorage.get();
+      if (activeAccount) {
+        // Clear subscription cache for this user
+        await clearSubscriptionCacheForUser(activeAccount.googleUserId);
       }
 
-      // Clear subscription cache on sign out
-      await clearSubscriptionCache();
+      // Clear active account (data is preserved, just not "logged in")
+      await activeAccountStorage.set(null);
 
       return { success: true, data: null };
     }
 
     case 'GET_SUBSCRIPTION': {
       try {
-        const user = await userStorage.get();
-        if (!user?.google_user_id) {
+        const activeAccount = await activeAccountStorage.get();
+        if (!activeAccount) {
           return { success: false, error: 'Not authenticated' };
         }
 
+        const userId = activeAccount.googleUserId;
+        const storage = getAccountStorage(userId);
+        const user = await storage.user.get();
+
         // Check cache first (5 minute TTL)
-        const cached = await getCachedSubscription();
+        const cached = await getCachedSubscriptionForUser(userId);
         if (cached) {
           console.log('[Canvas2Calendar] Using cached subscription:', cached);
           return {
@@ -280,19 +324,21 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         }
 
         // Cache miss - fetch from Edge Function
-        if (isEdgeFunctionsConfigured() && user.google_user_id) {
+        if (isEdgeFunctionsConfigured() && userId) {
           try {
-            const subscription = await checkSubscription(user.google_user_id);
+            const subscription = await checkSubscription(userId);
             console.log('[Canvas2Calendar] Fetched subscription from Edge Function:', subscription);
 
             // Cache the FULL result (including trial info)
-            await setCachedSubscription(subscription);
+            await setCachedSubscriptionForUser(userId, subscription);
 
             // Also update user storage with tier
-            await userStorage.set({
-              ...user,
-              subscription_tier: subscription.tier,
-            });
+            if (user) {
+              await storage.user.set({
+                ...user,
+                subscription_tier: subscription.tier,
+              });
+            }
 
             return {
               success: true,
@@ -308,7 +354,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           success: true,
           data: {
             has_access: true,
-            tier: (user.subscription_tier || 'free') as 'free' | 'pro' | 'max',
+            tier: (user?.subscription_tier || 'free') as 'free' | 'pro' | 'max',
             is_trial: true,
             is_paid: false,
             trial_days_remaining: 14,
@@ -329,10 +375,25 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
     }
 
     case 'GET_STATUS': {
+      const activeAccount = await activeAccountStorage.get();
+      if (!activeAccount) {
+        return {
+          success: true,
+          data: {
+            isAuthenticated: false,
+            hasCalendar: false,
+            hasIcsUrl: false,
+            subscription_tier: 'free',
+            is_syncing: false,
+          },
+        };
+      }
+
+      const storage = await getCurrentAccountStorage();
       const [user, calendar, syncState] = await Promise.all([
-        userStorage.get(),
-        calendarStorage.get(),
-        syncStateStorage.get(),
+        storage.user.get(),
+        storage.calendar.get(),
+        storage.syncState.get(),
       ]);
 
       return {
@@ -348,7 +409,12 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
     }
 
     case 'GET_USER': {
-      const user = await userStorage.get();
+      const activeAccount = await activeAccountStorage.get();
+      if (!activeAccount) {
+        return { success: true, data: null };
+      }
+      const storage = await getCurrentAccountStorage();
+      const user = await storage.user.get();
       return { success: true, data: user };
     }
 
@@ -358,12 +424,13 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         return { success: false, error: validation.error || 'Invalid URL' };
       }
 
-      const user = await userStorage.get();
+      const storage = await getCurrentAccountStorage();
+      const user = await storage.user.get();
       if (!user) {
         return { success: false, error: 'User not found' };
       }
 
-      await userStorage.set({
+      await storage.user.set({
         ...user,
         canvas_ics_feed_url: message.url,
         updated_at: new Date().toISOString(),
@@ -374,7 +441,8 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'CREATE_CALENDAR': {
       try {
-        const existingCalendar = await calendarStorage.get();
+        const storage = await getCurrentAccountStorage();
+        const existingCalendar = await storage.calendar.get();
         if (existingCalendar) {
           return { success: false, error: 'Calendar already exists' };
         }
@@ -394,7 +462,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           created_at: new Date().toISOString(),
         };
 
-        await calendarStorage.set(calendarData);
+        await storage.calendar.set(calendarData);
         return { success: true, data: calendarData };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : 'Failed to create calendar' };
@@ -403,8 +471,10 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'RESET_ALL': {
       try {
+        const storage = await getCurrentAccountStorage();
+
         // Delete from Google first
-        const calendar = await calendarStorage.get();
+        const calendar = await storage.calendar.get();
         if (calendar) {
           try {
             await CalendarAPI.deleteCalendar(calendar.google_calendar_id);
@@ -413,16 +483,22 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           }
         }
 
-        const taskLists = await taskListsStorage.get();
+        const taskLists = await storage.taskLists.get();
         for (const taskList of Object.values(taskLists)) {
           try {
-            await TasksAPI.deleteTaskList(taskList.google_task_list_id);
+            await TasksAPI.deleteTaskList((taskList as { google_task_list_id: string }).google_task_list_id);
           } catch {
             // Ignore if already deleted
           }
         }
 
-        await clearAllCanvas2CalData();
+        // Clear user-scoped data
+        await storage.calendar.set(null);
+        await storage.events.set({});
+        await storage.taskLists.set({});
+        await storage.tasks.set({});
+        await storage.syncState.set({ is_syncing: false });
+
         return { success: true, data: { message: 'All data cleared' } };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : 'Reset failed' };
@@ -431,7 +507,8 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'UPDATE_PREFERENCES': {
       try {
-        const user = await userStorage.get();
+        const storage = await getCurrentAccountStorage();
+        const user = await storage.user.get();
         if (!user) {
           return { success: false, error: 'User not found' };
         }
@@ -441,7 +518,7 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           ...message.preferences,
         };
 
-        await userStorage.set({
+        await storage.user.set({
           ...user,
           preferences: updatedPreferences,
           updated_at: new Date().toISOString(),
@@ -455,7 +532,8 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'GET_CANVAS_METADATA': {
       try {
-        const user = await userStorage.get();
+        const storage = await getCurrentAccountStorage();
+        const user = await storage.user.get();
         if (!user?.canvas_ics_feed_url) {
           return { success: false, error: 'No ICS URL configured' };
         }
@@ -509,9 +587,15 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
 
     case 'CREATE_CHECKOUT_SESSION': {
       try {
-        const user = await userStorage.get();
-        if (!user?.google_user_id || !user?.email) {
+        const activeAccount = await activeAccountStorage.get();
+        if (!activeAccount) {
           return { success: false, error: 'Not authenticated' };
+        }
+
+        const storage = await getCurrentAccountStorage();
+        const user = await storage.user.get();
+        if (!user?.email) {
+          return { success: false, error: 'User email not found' };
         }
 
         if (user.subscription_tier === 'pro') {
@@ -523,12 +607,12 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
         }
 
         const { checkout_url } = await createCheckoutSession({
-          google_user_id: user.google_user_id,
+          google_user_id: activeAccount.googleUserId,
           email: user.email,
         });
 
         // Clear subscription cache so next check fetches fresh data
-        await clearSubscriptionCache();
+        await clearSubscriptionCacheForUser(activeAccount.googleUserId);
 
         return { success: true, data: { checkout_url } };
       } catch (error) {
@@ -576,15 +660,54 @@ const runSync = async (
   };
 }> => {
   const syncStartedAt = new Date();
-  const user = await userStorage.get();
+  const storage = await getCurrentAccountStorage();
+  const user = await storage.user.get();
   if (!user) throw new Error('User not found');
 
   const feedUrl = icsUrl || user.canvas_ics_feed_url;
   if (!feedUrl) throw new Error('No ICS URL configured');
 
-  await syncStateStorage.set({ is_syncing: true });
+  await storage.syncState.set({ is_syncing: true });
 
   try {
+    // Ensure calendar exists BEFORE parsing/filtering events
+    // This allows users to have a calendar ready even if no events are synced
+    let calendar = await storage.calendar.get();
+    if (calendar) {
+      // Verify calendar still exists in Google (self-healing check)
+      try {
+        await CalendarAPI.getCalendar(calendar.google_calendar_id);
+      } catch (error) {
+        if (error instanceof GoogleApiException && (error.isNotFound() || error.isGone())) {
+          console.log('[Canvas2Calendar] Calendar was deleted externally, recreating...');
+          await storage.calendar.set(null);
+          await storage.events.set({});
+          calendar = null; // Will be recreated below
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (!calendar) {
+      // Create calendar if it doesn't exist
+      console.log('[Canvas2Calendar] Creating calendar before sync...');
+      const newCalendar = await CalendarAPI.createCalendar({
+        summary: 'Canvas Calendar',
+        description: 'Synced from Canvas LMS',
+      });
+
+      if (newCalendar.id) {
+        calendar = {
+          google_calendar_id: newCalendar.id,
+          title: newCalendar.summary || 'Canvas Calendar',
+          created_at: new Date().toISOString(),
+        };
+        await storage.calendar.set(calendar);
+        console.log('[Canvas2Calendar] Calendar created successfully');
+      }
+    }
+
     const parsedICS = await icsParser.fetchAndParse(feedUrl);
     const preferences = user.preferences || DEFAULT_PREFERENCES;
     const totalEventsParsed = parsedICS.events.length;
@@ -651,7 +774,7 @@ const runSync = async (
 
     const syncCompletedAt = new Date();
 
-    await syncStateStorage.set({
+    await storage.syncState.set({
       is_syncing: false,
       last_sync_at: syncCompletedAt.toISOString(),
     });
@@ -694,7 +817,7 @@ const runSync = async (
       },
     };
   } catch (error) {
-    await syncStateStorage.set({
+    await storage.syncState.set({
       is_syncing: false,
       last_sync_error: error instanceof Error ? error.message : 'Unknown error',
     });
@@ -705,50 +828,17 @@ const runSync = async (
 const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPreferences): Promise<SyncReport> => {
   const report: SyncReport = { created: [], updated: [], deleted: [], unchanged: [], errors: [] };
 
-  let calendar = await calendarStorage.get();
+  // Get user-scoped storage
+  const storage = await getCurrentAccountStorage();
+
+  // Calendar existence is guaranteed by runSync - just get the reference
+  const calendar = await storage.calendar.get();
   if (!calendar) {
     report.errors.push({ error: 'No calendar configured' });
     return report;
   }
 
-  // Verify calendar still exists in Google (self-healing check)
-  try {
-    await CalendarAPI.getCalendar(calendar.google_calendar_id);
-  } catch (error) {
-    if (error instanceof GoogleApiException && (error.isNotFound() || error.isGone())) {
-      console.log('[Canvas2Calendar] Calendar was deleted externally, recreating...');
-
-      // Clear stale data
-      await calendarStorage.set(null);
-      await eventsStorage.set({});
-
-      // Recreate calendar
-      const newCalendar = await CalendarAPI.createCalendar({
-        summary: calendar.title || 'Canvas Sync Calendar',
-        description: 'Synced from Canvas (auto-recreated)',
-      });
-
-      if (!newCalendar.id) {
-        report.errors.push({ error: 'Failed to recreate calendar' });
-        return report;
-      }
-
-      const newCalendarData: CalendarDataState = {
-        google_calendar_id: newCalendar.id,
-        title: newCalendar.summary || 'Canvas Calendar',
-        created_at: new Date().toISOString(),
-      };
-
-      await calendarStorage.set(newCalendarData);
-      calendar = newCalendarData;
-
-      console.log('[Canvas2Calendar] Calendar recreated successfully');
-    } else {
-      throw error; // Re-throw other errors
-    }
-  }
-
-  const existingEvents = await eventsStorage.get();
+  const existingEvents = await storage.events.get();
   const incomingMap = new Map<string, { event: CanvasEvent; hash: string }>();
 
   for (const event of events) {
@@ -939,7 +1029,7 @@ const syncCalendarEvents = async (events: CanvasEvent[], preferences: SyncPrefer
     }
   }
 
-  await eventsStorage.set(existingEvents);
+  await storage.events.set(existingEvents);
 
   console.log(
     `[Canvas2Calendar] Calendar sync complete: ${report.created.length} created, ${report.updated.length} updated, ${report.deleted.length} deleted, ${report.unchanged.length} unchanged, ${report.errors.length} errors`,
@@ -958,7 +1048,7 @@ const syncTasks = async (events: CanvasEvent[], preferences: SyncPreferences): P
     errors: [],
   };
 
-  // Group by course
+  // Group events by course
   const eventsByCourse = new Map<string, CanvasEvent[]>();
   for (const event of events) {
     const code = event.courseCode || 'Uncategorized';
@@ -966,10 +1056,18 @@ const syncTasks = async (events: CanvasEvent[], preferences: SyncPreferences): P
     eventsByCourse.get(code)!.push(event);
   }
 
-  const taskLists = await taskListsStorage.get();
-  const tasks = await tasksStorage.get();
+  // Get user-scoped storage for task lists and tasks
+  const storage = await getCurrentAccountStorage();
+  const taskLists = await storage.taskLists.get();
+  const tasks = await storage.tasks.get();
 
-  for (const [courseCode, courseEvents] of eventsByCourse) {
+  // Ensure task lists exist for ALL courses in user's preferences, not just those with events
+  // This allows users to have empty task lists they can use manually
+  const preferredCourses = preferences.tasks.included_courses || [];
+  const allCoursesToProcess = new Set<string>([...preferredCourses, ...eventsByCourse.keys()]);
+
+  for (const courseCode of allCoursesToProcess) {
+    const courseEvents = eventsByCourse.get(courseCode) || [];
     try {
       let taskList = taskLists[courseCode];
       let googleTaskListId: string;
@@ -1231,8 +1329,8 @@ const syncTasks = async (events: CanvasEvent[], preferences: SyncPreferences): P
     }
   }
 
-  await taskListsStorage.set(taskLists);
-  await tasksStorage.set(tasks);
+  await storage.taskLists.set(taskLists);
+  await storage.tasks.set(tasks);
   return report;
 };
 
