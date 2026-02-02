@@ -2,7 +2,6 @@ import { InjectedButtons } from './components/InjectedButtons';
 import { MainPanel } from './components/MainPanel';
 import { TooltipProvider } from '@extension/ui';
 import { useState, useEffect } from 'react';
-import type { SubscriptionData } from './components/TrialBanner';
 
 export type AppState = 'LOADING' | 'SIGNED_OUT' | 'NEEDS_ICS' | 'READY';
 
@@ -16,13 +15,6 @@ export default function App() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [appState, setAppState] = useState<AppState>('LOADING');
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [subscriptionData, setSubscriptionData] = useState<SubscriptionData>({
-    has_access: true,
-    tier: 'free',
-    is_trial: true,
-    is_paid: false,
-    trial_days_remaining: 14,
-  });
 
   useEffect(() => {
     console.log('[C2C] Google Calendar content UI loaded');
@@ -48,12 +40,6 @@ export default function App() {
       if (!status.isAuthenticated) {
         setAppState('SIGNED_OUT');
         return;
-      }
-
-      // Fetch full subscription data
-      const subResponse = await chrome.runtime.sendMessage({ type: 'GET_SUBSCRIPTION' });
-      if (subResponse.success && subResponse.data) {
-        setSubscriptionData(subResponse.data);
       }
 
       // Fetch user data for profile display
@@ -110,7 +96,6 @@ export default function App() {
         onClose={handleClosePanel}
         appState={appState}
         onStateChange={handleStateChange}
-        subscriptionData={subscriptionData}
         userData={userData}
         onSignOut={() => {
           setUserData(null);

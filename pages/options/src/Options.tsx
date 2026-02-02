@@ -20,8 +20,6 @@ const Options = () => {
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastVariant, setToastVariant] = useState<'success' | 'error' | 'info' | 'warning'>('info');
   const [showToast, setShowToast] = useState(false);
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'pro' | 'max'>('free');
-  const [upgrading, setUpgrading] = useState(false);
 
   const showToastNotification = (message: string, variant: 'success' | 'error' | 'info' | 'warning') => {
     setToastMessage(message);
@@ -67,16 +65,6 @@ const Options = () => {
       // Load ICS URL
       const icsResponse = await user.getIcsUrl();
       setIcsUrl(icsResponse?.ics_url || null);
-
-      // Load subscription tier
-      try {
-        const subResponse = await chrome.runtime.sendMessage({ type: 'GET_SUBSCRIPTION' });
-        if (subResponse.success) {
-          setSubscriptionTier(subResponse.data.tier);
-        }
-      } catch {
-        console.warn('Could not fetch subscription status');
-      }
     } catch (err) {
       showToastNotification(err instanceof Error ? err.message : 'Failed to load settings', 'error');
     } finally {
@@ -150,25 +138,6 @@ const Options = () => {
       showToastNotification(err instanceof Error ? err.message : 'Failed to reset calendar data', 'error');
     } finally {
       setResetting(false);
-    }
-  };
-
-  const handleUpgrade = async () => {
-    try {
-      setUpgrading(true);
-      const response = await chrome.runtime.sendMessage({ type: 'CREATE_CHECKOUT_SESSION' });
-
-      if (response.success && response.data?.checkout_url) {
-        // Open Stripe Checkout in new tab
-        chrome.tabs.create({ url: response.data.checkout_url });
-        showToastNotification('Redirecting to checkout...', 'info');
-      } else {
-        showToastNotification(response.error || 'Failed to create checkout session', 'error');
-      }
-    } catch (err) {
-      showToastNotification(err instanceof Error ? err.message : 'Failed to start upgrade', 'error');
-    } finally {
-      setUpgrading(false);
     }
   };
 
@@ -666,49 +635,6 @@ const Options = () => {
                 <p>Canvas2Calendar Extension</p>
                 <p className="text-sm">Sync Canvas assignments to Google Calendar & Tasks</p>
               </div>
-            </section>
-
-            {/* Subscription Section */}
-            <section className="settings-section">
-              <h3>Subscription</h3>
-              <div className="setting-item">
-                <h4 className="setting-label">Current Plan</h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
-                  <span
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '12px',
-                      backgroundColor: subscriptionTier === 'pro' ? 'var(--color-success)' : 'var(--color-muted)',
-                      color: subscriptionTier === 'pro' ? 'white' : 'inherit',
-                      fontWeight: 500,
-                      textTransform: 'uppercase',
-                      fontSize: '0.75rem',
-                    }}>
-                    {subscriptionTier}
-                  </span>
-                  {subscriptionTier === 'pro' && (
-                    <span className="text-sm" style={{ color: 'var(--color-success)' }}>
-                      ✓ All features unlocked
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {subscriptionTier === 'free' && (
-                <div className="setting-item">
-                  <h4 className="setting-label">Upgrade to Pro</h4>
-                  <p className="setting-description">
-                    Get unlimited syncs, manual sync, full customization, and more for a one-time payment of $20.
-                  </p>
-                  <button
-                    onClick={handleUpgrade}
-                    disabled={upgrading}
-                    className="btn btn-primary btn-md mt-2"
-                    style={{ backgroundColor: 'var(--color-primary)' }}>
-                    {upgrading ? 'Starting checkout...' : '🚀 Upgrade to Pro - $20'}
-                  </button>
-                </div>
-              )}
             </section>
           </div>
         )}

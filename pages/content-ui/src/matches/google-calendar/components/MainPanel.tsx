@@ -5,27 +5,17 @@ import { Button } from '@extension/ui';
 import { X, LogOut, User } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { AppState, UserData } from '../App';
-import type { SubscriptionData } from './TrialBanner';
 
 interface MainPanelProps {
   isOpen: boolean;
   onClose: () => void;
   appState: AppState;
   onStateChange: (state: AppState) => void;
-  subscriptionData: SubscriptionData;
   userData: UserData | null;
   onSignOut: () => void;
 }
 
-export const MainPanel = ({
-  isOpen,
-  onClose,
-  appState,
-  onStateChange,
-  subscriptionData,
-  userData,
-  onSignOut,
-}: MainPanelProps) => {
+export const MainPanel = ({ isOpen, onClose, appState, onStateChange, userData, onSignOut }: MainPanelProps) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
@@ -172,7 +162,7 @@ export const MainPanel = ({
 
             {appState === 'NEEDS_ICS' && <IcsUrlInput onSuccess={() => onStateChange('READY')} />}
 
-            {appState === 'READY' && <SettingsPanel subscriptionData={subscriptionData} />}
+            {appState === 'READY' && <SettingsPanel />}
           </div>
         </div>
       </div>
