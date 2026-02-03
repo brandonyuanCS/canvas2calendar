@@ -17,5 +17,8 @@ Currently in plans to be published on the Chrome web store by early 2026. Some f
 - ICS feeds are parsed on the server to sync based on diffs in tasks/events.
 - Authentication is handled via Google OAuth.
 
+> Credit to this [template](https://github.com/Jonghakseo/chrome-extension-boilerplate-react-vite)
+
+
 ---
 
