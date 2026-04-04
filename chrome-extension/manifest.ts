@@ -31,7 +31,7 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   host_permissions: ['https://www.googleapis.com/*', 'https://*.supabase.co/*'],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'identity', 'sidePanel', 'alarms'],
+  permissions: ['storage', 'unlimitedStorage', 'scripting', 'tabs', 'notifications', 'identity', 'sidePanel', 'alarms'],
   options_ui: {
     page: 'options/index.html',
     open_in_tab: true,

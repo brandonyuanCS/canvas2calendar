@@ -52,3 +52,133 @@
 .bg-border {
   background-color: hsl(var(--border)) !important;
 }
+
+/* ============================================================
+   Toolbar: Injected button group in Google Calendar header
+   ============================================================ */
+
+.c2c-toolbar-group {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  /* Match Google Calendar header height (~64px) — center vertically */
+  height: 64px;
+  padding: 0 4px;
+
+  pointer-events: auto;
+}
+
+/* Main "class2calendar" button */
+.c2c-main-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 18px !important;
+
+  font-family: 'Google Sans', 'Roboto', -apple-system, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.01em !important;
+  white-space: nowrap !important;
+
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.c2c-main-button:hover {
+  background: hsl(var(--accent)) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+.c2c-main-button:active {
+  transform: scale(0.98) !important;
+}
+
+.c2c-main-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Calendar icon inside the main button */
+.c2c-logo-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+  stroke: currentColor !important;
+}
+
+/* Label text */
+.c2c-label {
+  line-height: 1 !important;
+}
+
+/* Square sync button */
+.c2c-sync-button {
+  width: 36px !important;
+  height: 36px !important;
+  padding: 0 !important;
+  border-radius: 18px !important;
+
+  color: hsl(var(--foreground)) !important;
+  background: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.c2c-sync-button:hover {
+  background: hsl(var(--accent)) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+.c2c-sync-button:active {
+  transform: scale(0.95) !important;
+}
+
+.c2c-sync-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Sync icon */
+.c2c-sync-icon {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Spin animation for syncing state */
+@keyframes c2c-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.c2c-spin {
+  animation: c2c-spin 1s linear infinite !important;
+}
+
+/* Inline status message to the right of button group */
+.c2c-status-text {
+  font-family: 'Google Sans', 'Roboto', -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+  padding-left: 4px;
+  user-select: none;
+}

@@ -779,6 +779,15 @@ const runSync = async (
       last_sync_at: syncCompletedAt.toISOString(),
     });
 
+    // Log storage usage after sync
+    chrome.storage.local.getBytesInUse(null, bytes => {
+      const mb = (bytes / (1024 * 1024)).toFixed(2);
+      console.log(`[Canvas2Calendar] Storage usage: ${mb} MB`);
+      if (bytes > 4 * 1024 * 1024) {
+        console.warn(`[Canvas2Calendar] ⚠ Storage usage exceeds 4MB (${mb} MB)`);
+      }
+    });
+
     // Return ApiSyncReport format
     return {
       calendar: {

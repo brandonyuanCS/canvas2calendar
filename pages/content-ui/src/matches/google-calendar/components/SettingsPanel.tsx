@@ -18,9 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@extension/ui';
-import { RefreshCw, Clock, Calendar, ListTodo, Sliders } from 'lucide-react';
+import { RefreshCw, Clock, Calendar, ListTodo, Sliders, Trash2 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { SyncPreferences, CanvasEventType } from '@extension/shared';
+import type { SyncPreferences, CanvasEventType, ApiSyncReport } from '@extension/shared';
 
 // ⚠️ IMPORTANT: These must be defined OUTSIDE the component to prevent re-creation on each render
 // Moving them inside causes React to lose input focus after every keystroke
@@ -45,6 +45,8 @@ export const SettingsPanel = () => {
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncSummary, setLastSyncSummary] = useState<string | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   // Full preferences state matching SyncPreferences
   const [preferences, setPreferences] = useState<SyncPreferences | null>(null);
@@ -132,14 +134,78 @@ export const SettingsPanel = () => {
 
   const handleSync = async () => {
     setIsSyncing(true);
+    setLastSyncSummary(null);
     try {
-      await sync.performSync();
+      const result = await sync.performSync();
       setLastSynced(new Date());
       await chrome.storage.local.set({ canvas2calendar_sync_state: { last_synced: Date.now() } });
+
+      // Build sync summary
+      if (result.success && result.report) {
+        const summary = formatSyncSummary(result.report);
+        setLastSyncSummary(summary);
+      }
     } catch (error) {
       console.error('[C2C] Sync failed:', error);
+      setLastSyncSummary('Sync failed');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const formatSyncSummary = (report: ApiSyncReport): string => {
+    const parts: string[] = [];
+    const cal = report.calendar.summary;
+    const task = report.tasks.summary;
+
+    const eventsCreated = cal.created;
+    const eventsUpdated = cal.updated;
+    const eventsDeleted = cal.deleted;
+    const tasksCreated = task.tasks_created;
+    const tasksUpdated = task.tasks_updated;
+    const tasksDeleted = task.tasks_deleted;
+
+    if (eventsCreated > 0) parts.push(`${eventsCreated} event${eventsCreated > 1 ? 's' : ''} created`);
+    if (eventsUpdated > 0) parts.push(`${eventsUpdated} event${eventsUpdated > 1 ? 's' : ''} updated`);
+    if (eventsDeleted > 0) parts.push(`${eventsDeleted} event${eventsDeleted > 1 ? 's' : ''} deleted`);
+    if (tasksCreated > 0) parts.push(`${tasksCreated} task${tasksCreated > 1 ? 's' : ''} created`);
+    if (tasksUpdated > 0) parts.push(`${tasksUpdated} task${tasksUpdated > 1 ? 's' : ''} updated`);
+    if (tasksDeleted > 0) parts.push(`${tasksDeleted} task${tasksDeleted > 1 ? 's' : ''} deleted`);
+
+    if (parts.length === 0) return 'Everything up to date';
+    return parts.join(', ');
+  };
+
+  const handleReset = async () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to reset all synced data?\n\n' +
+        'This will permanently delete:\n' +
+        '• Your Class2Calendar Google Calendar\n' +
+        '• All synced events\n' +
+        '• All created task lists\n' +
+        '• All synced tasks\n\n' +
+        'Your preferences and settings will be preserved.\n\n' +
+        'This action cannot be undone.',
+    );
+
+    if (!confirmed) return;
+
+    setIsResetting(true);
+    try {
+      const result = await sync.reset();
+      if (result.success) {
+        setLastSynced(null);
+        setLastSyncSummary('All data cleared');
+        // Clear sync state from storage
+        await chrome.storage.local.remove('canvas2calendar_sync_state');
+      } else {
+        setLastSyncSummary('Reset failed');
+      }
+    } catch (error) {
+      console.error('[C2C] Reset failed:', error);
+      setLastSyncSummary('Reset failed');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -278,10 +344,13 @@ export const SettingsPanel = () => {
             Last synced: <span className="text-foreground font-medium">{formatLastSynced()}</span>
           </span>
         </div>
-        <Button onClick={handleSync} disabled={isSyncing} className="gap-2">
-          <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-          {isSyncing ? 'Syncing...' : 'Sync Now'}
-        </Button>
+        <div className="flex items-center gap-3">
+          {lastSyncSummary && <span className="text-muted-foreground text-sm">{lastSyncSummary}</span>}
+          <Button onClick={handleSync} disabled={isSyncing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync Now'}
+          </Button>
+        </div>
       </div>
 
       {/* Accordion Layout */}
@@ -563,6 +632,25 @@ export const SettingsPanel = () => {
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+
+      {/* Reset All Button */}
+      <div className="mt-6 border-t pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-destructive text-sm font-medium">Reset All Data</h4>
+            <p className="text-muted-foreground text-xs">Delete all synced calendars, events, task lists, and tasks</p>
+          </div>
+          <Button
+            variant="destructive"
+            onClick={handleReset}
+            disabled={isResetting}
+            className="gap-2"
+            style={{ backgroundColor: '#dc2626', color: 'white', position: 'relative', zIndex: 10 }}>
+            <Trash2 className="h-4 w-4" />
+            {isResetting ? 'Resetting...' : 'Reset All'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };

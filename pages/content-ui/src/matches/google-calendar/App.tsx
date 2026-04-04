@@ -1,5 +1,6 @@
 import { InjectedButtons } from './components/InjectedButtons';
 import { MainPanel } from './components/MainPanel';
+import { sync } from '@extension/shared';
 import { TooltipProvider } from '@extension/ui';
 import { useState, useEffect } from 'react';
 
@@ -15,6 +16,7 @@ export default function App() {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [appState, setAppState] = useState<AppState>('LOADING');
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     console.log('[C2C] Google Calendar content UI loaded');
@@ -73,8 +75,21 @@ export default function App() {
   };
 
   const handleQuickSync = async () => {
-    // Quick sync logic - will be implemented
-    console.log('[C2C] Quick sync triggered');
+    if (isSyncing || appState !== 'READY') return;
+    setIsSyncing(true);
+    try {
+      console.log('[C2C] Quick sync triggered');
+      const result = await sync.performSync();
+      if (result.success) {
+        console.log('[C2C] Sync complete:', result.report);
+      } else {
+        console.error('[C2C] Sync failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[C2C] Sync error:', error);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleStateChange = (newState: AppState) => {
@@ -87,8 +102,13 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      {/* Bottom-left buttons */}
-      <InjectedButtons onOpenPanel={handleOpenPanel} onQuickSync={handleQuickSync} appState={appState} />
+      {/* Top-center toolbar buttons */}
+      <InjectedButtons
+        onOpenPanel={handleOpenPanel}
+        onQuickSync={handleQuickSync}
+        appState={appState}
+        isSyncing={isSyncing}
+      />
 
       {/* Main popup panel */}
       <MainPanel
