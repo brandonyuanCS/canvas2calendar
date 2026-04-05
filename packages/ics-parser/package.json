@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@extension/shared": "workspace:*",
-    "ical.js": "^2.1.0"
+    "ical.js": "^2.2.1"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*"

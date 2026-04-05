@@ -23,7 +23,7 @@
     "postinstall": "pnpm ready"
   },
   "dependencies": {
-    "react-error-boundary": "^6.0.0"
+    "react-error-boundary": "^6.1.1"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*",

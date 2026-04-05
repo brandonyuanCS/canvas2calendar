@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@extension/env": "workspace:*",
-    "@supabase/supabase-js": "^2.47.10"
+    "@supabase/supabase-js": "^2.101.1"
   },
   "devDependencies": {
     "@extension/tsconfig": "workspace:*"
