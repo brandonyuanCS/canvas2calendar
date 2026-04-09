@@ -79,7 +79,7 @@ export const MainPanel = ({ isOpen, onClose, appState, onStateChange, userData, 
       {/* Dialog Content - Even higher z-index */}
       <div
         ref={dialogRef}
-        className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+        className="text-foreground fixed inset-0 z-[10000] flex items-center justify-center p-4"
         onClick={handleBackdropClick}
         role="button"
         tabIndex={-1}

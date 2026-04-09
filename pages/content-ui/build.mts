@@ -43,6 +43,7 @@ const builds = configs.map(async ({ name, config }) => {
     ['--config']: resolve(rootDir, 'tailwind.config.ts'),
     ['--watch']: IS_DEV,
   };
+
   await buildTW(args);
   //@ts-expect-error This is hidden property into vite's resolveConfig()
   config.configFile = false;
