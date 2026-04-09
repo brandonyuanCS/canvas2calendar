@@ -20,14 +20,12 @@ export default function App() {
 
   useEffect(() => {
     console.log('[C2C] Google Calendar content UI loaded');
-
-    // Check initial auth state
     checkAuthState();
   }, []);
 
   const checkAuthState = async () => {
     try {
-      // Get all status info from background via message (single source of truth)
+      // get all status info from background via message
       const response = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
 
       if (!response.success) {

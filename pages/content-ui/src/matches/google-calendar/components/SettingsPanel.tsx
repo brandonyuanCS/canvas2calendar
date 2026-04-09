@@ -22,7 +22,7 @@ import { RefreshCw, Clock, Calendar, ListTodo, Sliders, Trash2 } from 'lucide-re
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SyncPreferences, CanvasEventType, ApiSyncReport } from '@extension/shared';
 
-// ⚠️ IMPORTANT: These must be defined OUTSIDE the component to prevent re-creation on each render
+// IMPORTANT: These must be defined OUTSIDE the component to prevent re-creation on each render
 // Moving them inside causes React to lose input focus after every keystroke
 
 const colorOptions = [
