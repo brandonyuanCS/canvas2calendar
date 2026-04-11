@@ -1,14 +1,13 @@
 /**
  * Supabase Preferences Module
- * Cloud sync for user preferences (Pro users only)
+ * Cloud sync for user preferences
  */
 
 import { getSupabaseClient } from './client.js';
-import { isPremiumUser } from './users.js';
 import type { DbPreferences } from './types.js';
 
 /**
- * Save preferences to cloud (Pro users only)
+ * Save preferences to cloud
  * Local preferences take precedence - this is called when user saves locally
  *
  * @param googleUserId - The user's Google ID
@@ -19,16 +18,8 @@ export const savePreferencesToCloud = async (
   googleUserId: string,
   preferences: Record<string, unknown>,
 ): Promise<DbPreferences | null> => {
-  // Only premium users can sync to cloud
-  const isPremium = await isPremiumUser(googleUserId);
-  if (!isPremium) {
-    console.log('[Supabase] User is not premium, skipping cloud sync');
-    return null;
-  }
-
   const supabase = getSupabaseClient();
 
-  // First, get the user's database ID
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
@@ -47,7 +38,7 @@ export const savePreferencesToCloud = async (
       {
         user_id: user.id,
         preferences_data: preferences,
-        version: 1, // TODO: Implement version incrementing for conflict detection
+        version: 1, // TODO: implement versioning to resolve local/cloud conflicts
         updated_at: new Date().toISOString(),
       },
       {
@@ -67,22 +58,15 @@ export const savePreferencesToCloud = async (
 };
 
 /**
- * Load preferences from cloud (Pro users only)
+ * Load preferences from cloud
  * Called on initial load to check if cloud has preferences
  *
  * @param googleUserId - The user's Google ID
  * @returns The preferences data, or null if not found or user is not premium
  */
 export const loadPreferencesFromCloud = async (googleUserId: string): Promise<Record<string, unknown> | null> => {
-  // Only premium users can load from cloud
-  const isPremium = await isPremiumUser(googleUserId);
-  if (!isPremium) {
-    return null;
-  }
-
   const supabase = getSupabaseClient();
 
-  // Get user ID first
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
@@ -93,12 +77,11 @@ export const loadPreferencesFromCloud = async (googleUserId: string): Promise<Re
     return null;
   }
 
-  // Get preferences
   const { data, error } = await supabase.from('preferences').select('preferences_data').eq('user_id', user.id).single();
 
   if (error) {
     if (error.code === 'PGRST116') {
-      // No preferences found - that's fine
+      // no preferences found
       return null;
     }
     console.error('[Supabase] Failed to load preferences:', error.message);
@@ -115,7 +98,6 @@ export const loadPreferencesFromCloud = async (googleUserId: string): Promise<Re
 export const deleteCloudPreferences = async (googleUserId: string): Promise<void> => {
   const supabase = getSupabaseClient();
 
-  // Get user ID first
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('id')
