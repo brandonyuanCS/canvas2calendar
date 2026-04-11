@@ -35,6 +35,8 @@ import {
   checkSubscription,
   createCheckoutSession,
   isEdgeFunctionsConfigured,
+  savePreferencesToCloud,
+  loadPreferencesFromCloud,
 } from '@extension/supabase';
 import type { CanvasEvent, SyncPreferences, SyncReport, TaskSyncReport, TaskListNaming } from '@extension/shared';
 import type { CalendarDataState, AccountStorage } from '@extension/storage';
@@ -129,6 +131,8 @@ const getCurrentAccountStorage = async (): Promise<AccountStorage> => {
   const userId = await getActiveUserId();
   return getAccountStorage(userId);
 };
+
+let cloudPrefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // ============= Initialization =============
 
@@ -262,6 +266,24 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           created_at: existingUser?.created_at || now,
           updated_at: now,
         });
+
+        if (isEdgeFunctionsConfigured()) {
+          try {
+            const cloudPrefs = await loadPreferencesFromCloud(userInfo.id);
+            if (cloudPrefs) {
+              const currUser = await storage.user.get();
+              if (currUser) {
+                await storage.user.set({
+                  ...currUser,
+                  preferences: cloudPrefs as unknown as SyncPreferences,
+                });
+                console.log('[C2C] Preferences loaded from cloud');
+              }
+            }
+          } catch (err) {
+            console.warn('[C2C] Unable to load cloud preferences', err);
+          }
+        }
 
         return {
           success: true,
@@ -523,6 +545,19 @@ const handleMessage = async (message: BackgroundMessage): Promise<BackgroundResp
           preferences: updatedPreferences,
           updated_at: new Date().toISOString(),
         });
+
+        if (user.google_user_id && isEdgeFunctionsConfigured()) {
+          if (cloudPrefsSaveTimer) {
+            clearTimeout(cloudPrefsSaveTimer);
+          }
+          cloudPrefsSaveTimer = setTimeout(async () => {
+            try {
+              await savePreferencesToCloud(user.google_user_id, updatedPreferences);
+            } catch (err) {
+              console.warn('[C2C] Cloud preferences failed to save', err);
+            }
+          }, 2000);
+        }
 
         return { success: true, data: updatedPreferences };
       } catch (error) {

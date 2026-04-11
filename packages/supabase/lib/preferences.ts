@@ -1,112 +1,79 @@
 /**
  * Supabase Preferences Module
- * Cloud sync for user preferences
+ * Cloud sync for user preferences via Edge Function
  */
 
-import { getSupabaseClient } from './client.js';
-import type { DbPreferences } from './types.js';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.SUPABASE_PUBLIC_KEY || '';
 
 /**
- * Save preferences to cloud
- * Local preferences take precedence - this is called when user saves locally
+ * Save preferences to cloud via Edge Function
  *
  * @param googleUserId - The user's Google ID
  * @param preferences - The preferences object to save
- * @returns The saved preferences record, or null if user is not premium
  */
 export const savePreferencesToCloud = async (
   googleUserId: string,
   preferences: Record<string, unknown>,
-): Promise<DbPreferences | null> => {
-  const supabase = getSupabaseClient();
+): Promise<void> => {
+  if (!SUPABASE_URL) return;
 
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('google_user_id', googleUserId)
-    .single();
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/manage-preferences`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({
+      google_user_id: googleUserId,
+      preferences_data: preferences,
+    }),
+  });
 
-  if (userError || !user) {
-    console.error('[Supabase] Failed to get user for preferences sync:', userError?.message);
-    return null;
-  }
-
-  // Upsert preferences
-  const { data, error } = await supabase
-    .from('preferences')
-    .upsert(
-      {
-        user_id: user.id,
-        preferences_data: preferences,
-        version: 1, // TODO: implement versioning to resolve local/cloud conflicts
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'user_id',
-      },
-    )
-    .select()
-    .single();
-
-  if (error) {
-    console.error('[Supabase] Failed to save preferences:', error.message);
-    return null;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `Failed to save preferences: ${response.status}`);
   }
 
   console.log('[Supabase] Preferences saved to cloud');
-  return data as DbPreferences;
 };
 
 /**
- * Load preferences from cloud
- * Called on initial load to check if cloud has preferences
+ * Load preferences from cloud via Edge Function
  *
  * @param googleUserId - The user's Google ID
- * @returns The preferences data, or null if not found or user is not premium
+ * @returns The preferences data, or null if not found
  */
 export const loadPreferencesFromCloud = async (googleUserId: string): Promise<Record<string, unknown> | null> => {
-  const supabase = getSupabaseClient();
+  if (!SUPABASE_URL) return null;
 
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('google_user_id', googleUserId)
-    .single();
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/manage-preferences?google_user_id=${encodeURIComponent(googleUserId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    },
+  );
 
-  if (userError || !user) {
-    return null;
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error(`Failed to load preferences: ${response.status}`);
   }
 
-  const { data, error } = await supabase.from('preferences').select('preferences_data').eq('user_id', user.id).single();
-
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // no preferences found
-      return null;
-    }
-    console.error('[Supabase] Failed to load preferences:', error.message);
-    return null;
-  }
-
-  return (data?.preferences_data as Record<string, unknown>) || null;
+  const data = await response.json();
+  return (data.preferences_data as Record<string, unknown>) ?? null;
 };
 
 /**
- * Delete cloud preferences
+ * Delete cloud preferences via Edge Function
  * Called when user resets their data
  */
 export const deleteCloudPreferences = async (googleUserId: string): Promise<void> => {
-  const supabase = getSupabaseClient();
+  if (!SUPABASE_URL) return;
 
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('id')
-    .eq('google_user_id', googleUserId)
-    .single();
-
-  if (userError || !user) {
-    return;
-  }
-
-  await supabase.from('preferences').delete().eq('user_id', user.id);
+  // Saving an empty object effectively clears preferences
+  // A dedicated DELETE endpoint can be added later if needed
+  await savePreferencesToCloud(googleUserId, {});
 };
